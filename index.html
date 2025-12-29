@@ -3,120 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner 2025</title>
+    <title>Kisa Scan</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: sans-serif; width: 100vw; height: 100vh; color: white; }
-        #container { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: sans-serif; overflow: hidden; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; background: #000; }
-        canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; display: none; }
+        /* Холст с фото */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 10; display: none; }
+        
+        /* Кнопка запуска */
+        .ui { z-index: 100; text-align: center; }
+        .btn-wrapper { position: relative; width: 220px; height: 70px; }
+        .btn { width: 100%; height: 100%; background: #f0f; color: #000; border: none; border-radius: 15px; font-weight: bold; font-size: 1.5rem; text-transform: uppercase; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 110; }
 
-        /* Стартовый экран (обязателен для разблокировки камеры) */
-        #overlay { position: absolute; z-index: 100; text-align: center; }
-        .start-btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
-
-        /* Кнопки управления */
-        #controls { position: absolute; bottom: 40px; width: 100%; display: none; justify-content: space-evenly; align-items: center; z-index: 20; }
-        #shutter { width: 80px; height: 80px; background: rgba(255,255,255,0.4); border: 5px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
-        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
-        #switchBtn { width: 60px; height: 60px; background: rgba(0,0,0,0.5); border: 2px solid #fff; border-radius: 50%; font-size: 30px; display: flex; justify-content: center; align-items: center; color: white; }
-
-        /* Надпись ГОТОВО */
-        #doneLabel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; color: #0f0; font-size: 5rem; font-weight: 900; display: none; text-transform: uppercase; text-shadow: 0 0 20px #000; }
+        /* Надпись КИСА */
+        #verdict { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 1000; padding: 20px 40px; border: 8px solid #f0f; display: none;
+            background: rgba(0,0,0,0.8); font-size: 4rem; font-weight: 900;
+            color: #f0f; text-align: center; width: 80%; box-sizing: border-box;
+            text-shadow: 2px 2px 10px #000; pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
 <div id="container">
-    <!-- Кнопка для запуска (разблокирует доступ) -->
-    <div id="overlay">
-        <button class="start-btn" onclick="startSystem()">ПОГНАЛИ</button>
-    </div>
+    <canvas id="photoCanvas"></canvas>
+    <div id="verdict">КИСА</div>
 
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-    
-    <div id="controls">
-        <div id="switchBtn" onclick="switchCamera()">🔄</div>
-        <div id="shutter" onclick="takePhoto()"></div>
+    <div class="ui" id="mainUi">
+        <div class="btn-wrapper">
+            <button class="btn">ПОГНАЛИ</button>
+            <input type="file" accept="image/*" capture="user" id="fileInput">
+        </div>
     </div>
-    
-    <div id="doneLabel">ГОТОВО</div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+    tg.ready();
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const controls = document.getElementById('controls');
-    const overlay = document.getElementById('overlay');
-    const doneLabel = document.getElementById('doneLabel');
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('photoCanvas');
+    const ctx = canvas.getContext('2d');
+    const verdict = document.getElementById('verdict');
+    const mainUi = document.getElementById('mainUi');
 
-    let currentStream = null;
-    let useFrontCamera = false;
+    fileInput.onchange = function(e) {
+        if (!e.target.files || e.target.files.length === 0) return;
 
-    async function startSystem() {
-        overlay.style.display = 'none';
-        controls.style.display = 'flex';
-        await initCamera();
-    }
+        // ПРЯЧЕМ КНОПКУ СРАЗУ
+        mainUi.style.display = "none";
 
-    async function initCamera() {
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
-        }
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                // Рисуем фото на весь экран
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                canvas.style.display = "block";
 
-        const constraints = {
-            video: { 
-                facingMode: useFrontCamera ? "user" : "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
+                // ПОКАЗЫВАЕМ НАДПИСЬ
+                setTimeout(() => {
+                    verdict.style.display = 'block';
+                    
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+
+                    // Системная кнопка Telegram для перезапуска
+                    tg.MainButton.setText("ЗАНОВО");
+                    tg.MainButton.show();
+                    tg.MainButton.onClick(() => {
+                        location.reload();
+                    });
+                }, 300);
+            };
+            img.src = event.target.result;
         };
-
-        try {
-            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = currentStream;
-            // Явный вызов play для iOS
-            await video.play();
-        } catch (err) {
-            alert("Ошибка камеры: " + err.name + ". Убедитесь, что используете HTTPS!");
-            overlay.style.display = 'block';
-            controls.style.display = 'none';
-        }
-    }
-
-    function switchCamera() {
-        useFrontCamera = !useFrontCamera;
-        initCamera();
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-    }
-
-    function takePhoto() {
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-        
-        // Останавливаем стрим
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
-        }
-        
-        video.style.display = "none";
-        controls.style.display = "none";
-        canvas.style.display = "block";
-        doneLabel.style.display = "block";
-
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-
-        tg.MainButton.setText("ЗАНОВО");
-        tg.MainButton.show();
-        tg.MainButton.onClick(() => location.reload());
-    }
+        reader.readAsDataURL(e.target.files[0]);
+    };
 </script>
 </body>
 </html>
