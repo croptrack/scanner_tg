@@ -6,27 +6,24 @@
     <title>Skaner 3000</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
-        #container { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         
-        /* Холст с фото */
-        #photoCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 1; display: none; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 5; display: none; }
         
-        /* Интерфейс */
-        .ui { z-index: 10; text-align: center; width: 100%; }
-        #statusBox { background: rgba(0,255,0,0.1); border: 1px solid #0f0; padding: 12px; margin: 20px; font-size: 14px; text-transform: uppercase; }
+        .ui { z-index: 20; text-align: center; }
+        #statusBox { background: rgba(0,0,0,0.8); border: 1px solid #0f0; padding: 10px; margin-bottom: 20px; font-family: monospace; }
         
-        /* Кнопка */
-        .btn-wrapper { position: relative; display: inline-block; }
-        .btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 12px; font-weight: bold; font-size: 1.2rem; cursor: pointer; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .btn-wrapper { position: relative; width: 200px; height: 60px; }
+        .btn { width: 100%; height: 100%; background: #0f0; color: #000; border: none; border-radius: 10px; font-weight: bold; font-size: 1.1rem; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 30; }
 
-        /* Финальный вердикт */
-        #result { 
+        /* Всплывающая плашка */
+        #verdictOverlay { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 100; padding: 30px; border: 6px solid; display: none;
-            background: rgba(0,0,0,0.9); font-size: 2.5rem; font-weight: bold;
-            text-align: center; width: 80%; box-sizing: border-box;
+            z-index: 100; padding: 20px; border: 5px solid; display: none;
+            background: rgba(0,0,0,0.9); font-size: 2.5rem; font-weight: 900;
+            text-align: center; width: 85%; box-sizing: border-box; font-family: Impact, sans-serif;
         }
     </style>
 </head>
@@ -34,11 +31,10 @@
 
 <div id="container">
     <canvas id="photoCanvas"></canvas>
-    
-    <div id="result"></div>
+    <div id="verdictOverlay"></div>
 
     <div class="ui" id="mainUi">
-        <div id="statusBox">СИСТЕМА ГОТОВА К СКАНУ</div>
+        <div id="statusBox">СИСТЕМА ГОТОВА</div>
         <div class="btn-wrapper">
             <button class="btn">СДЕЛАТЬ СКАН</button>
             <input type="file" accept="image/*" capture="user" id="fileInput">
@@ -49,66 +45,73 @@
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    tg.ready();
 
     const fileInput = document.getElementById('fileInput');
     const canvas = document.getElementById('photoCanvas');
     const ctx = canvas.getContext('2d');
     const statusBox = document.getElementById('statusBox');
-    const resultDiv = document.getElementById('result');
+    const verdictOverlay = document.getElementById('verdictOverlay');
     const mainUi = document.getElementById('mainUi');
 
-    fileInput.onchange = (e) => {
+    fileInput.onchange = function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Скрываем кнопку, чтобы не мешала смотреть результат
-        mainUi.style.opacity = "0";
-        statusBox.innerText = "АНАЛИЗ ДАННЫХ...";
-
+        statusBox.innerText = "ОБРАБОТКА...";
+        
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = function(event) {
             const img = new Image();
-            img.onload = () => {
-                // Отображаем фото на весь экран
+            img.onload = function() {
+                // 1. Показываем холст и рисуем фото
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
                 canvas.style.display = "block";
+                
+                // Скрываем кнопку скана
+                mainUi.style.display = "none";
 
-                // Задержка для эффекта "сканирования"
-                setTimeout(showRandomVerdict, 1000);
+                // 2. Генерируем вердикт через 500мс
+                setTimeout(() => {
+                    const isBad = Math.random() > 0.5;
+                    const text = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
+                    const color = isBad ? '#ff0000' : '#00ff00';
+
+                    // 3. Рисуем текст прямо на картинке (на случай, если оверлей не сработает)
+                    ctx.fillStyle = color;
+                    ctx.font = `bold ${canvas.width / 8}px sans-serif`;
+                    ctx.textAlign = "center";
+                    ctx.strokeStyle = "black";
+                    ctx.lineWidth = canvas.width / 50;
+                    ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+                    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+                    // 4. Показываем всплывающее окно
+                    verdictOverlay.innerText = text;
+                    verdictOverlay.style.color = color;
+                    verdictOverlay.style.borderColor = color;
+                    verdictOverlay.style.display = 'block';
+
+                    // 5. Вибрация
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
+                    }
+
+                    // Кнопка "Сброс" через 3 секунды
+                    setTimeout(() => {
+                        tg.MainButton.setText("ПОПРОБОВАТЬ ЕЩЕ РАЗ");
+                        tg.MainButton.show();
+                        tg.MainButton.onClick(() => {
+                            location.reload();
+                        });
+                    }, 1000);
+                }, 500);
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
     };
-
-    function showRandomVerdict() {
-        const isBad = Math.random() > 0.5;
-        
-        // Текст
-        resultDiv.innerText = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
-        
-        // Цвета
-        const color = isBad ? '#ff0000' : '#00ff00';
-        resultDiv.style.color = color;
-        resultDiv.style.borderColor = color;
-        
-        // Показ
-        resultDiv.style.display = 'block';
-        
-        // Вибрация Telegram
-        if (tg.HapticFeedback) {
-            tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
-        }
-
-        // Кнопка перезагрузки (через 3 секунды можно снова)
-        setTimeout(() => {
-            statusBox.innerText = "НАЖМИТЕ ДЛЯ ПОВТОРНОГО СКАНА";
-            mainUi.style.opacity = "1";
-        }, 2000);
-    }
 </script>
 </body>
 </html>
