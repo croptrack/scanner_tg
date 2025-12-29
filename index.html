@@ -6,7 +6,7 @@
     <title>Skaner 3000</title>
     <script src="telegram.org"></script>
     <script src="cdn.jsdelivr.net"></script>
-    <script src="cdn.jsdelivr.net"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #000; color: #0f0; font-family: monospace; }
         #video-container { position: relative; width: 100vw; height: 100vh; }
@@ -72,8 +72,8 @@
 
     async function processImage(event) {
         const files = event.target.files;
-        if (files.length === 0) return; // Проверка на пустой выбор
-        const file = files[0];
+        if (files.length === 0) return;
+        const file = files[0]; // Получаем первый файл из списка
 
         startButton.style.display = 'none'; 
         const img = new Image();
