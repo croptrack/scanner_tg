@@ -15,8 +15,7 @@
         #result { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; font-weight: bold; text-shadow: 0 0 10px #000; display: none; padding: 20px; border-radius: 10px; z-index: 20; text-align: center; width: 80%; }
         .status { background: rgba(0,0,0,0.6); padding: 5px; margin-top: 10px; }
         .button-wrapper { position: relative; display: inline-block; }
-        #startButton { background-color: #00ff00; color: #000; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 5px; pointer-events: none; /* Кнопка не реагирует на клики */ }
-        /* Элемент ввода файла будет расположен поверх кнопки и реагировать на клик */
+        #startButton { background-color: #00ff00; color: #000; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 5px; pointer-events: none; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
     </style>
 </head>
@@ -72,37 +71,35 @@
     }
 
     async function processImage(event) {
-        const file = event.target.files[0];
+        const file = event.target.files[0]; // Получаем первый файл из списка
         if (!file) return;
 
-        // Скрываем кнопку после выбора фото
         startButton.style.display = 'none'; 
         const img = new Image();
         const reader = new FileReader();
         reader.onload = async (e) => {
             img.src = e.target.result;
             img.onload = async () => {
-                canvas.width = window.innerWidth; // Адаптируем холст к размеру экрана
+                canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height); // Рисуем фото на весь экран
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 statusText.innerText = "Анализ изображения...";
                 
                 const poses = await detector.estimatePoses(img);
-                if (poses.length > 0 && poses[0].score > 0.4) { // Проверяем первый найденный силуэт
+                // ИСПРАВЛЕНИЕ: Проверяем score первого элемента массива poses[0].score
+                if (poses.length > 0 && poses[0].score > 0.4) { 
                     statusText.innerText = "ОБЪЕКТ ОБНАРУЖЕН";
                     statusText.style.color = "#ff0";
                     showVerdict();
                 } else {
                     statusText.innerText = "Силуэт не найден на фото.";
                 }
-                 // Показываем кнопку снова через 4 секунды, чтобы пользователь мог сделать еще фото
                  setTimeout(() => { startButton.style.display = 'inline-block'; }, 4000);
             }
         };
         reader.readAsDataURL(file);
     }
 
-    // Обработчик выбора файла/фото
     fileInput.addEventListener('change', processImage);
 
     async function main() {
