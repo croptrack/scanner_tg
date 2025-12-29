@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Camera iOS Safari</title>
-  <!-- Отключаем кеш -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
+  <title>Mini App Camera</title>
+  <!-- Telegram WebApp JS -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
   <style>
     body {
       margin: 0;
@@ -25,9 +24,9 @@
       font-weight: bold;
     }
     #go {
-      font-size: 80px; /* В 4 раза больше, чем было 20px */
+      font-size: 80px;
       font-weight: bold;
-      margin-top: 40px; /* Расстояние от основной надписи */
+      margin-top: 40px;
     }
     input {
       display: none;
@@ -37,10 +36,16 @@
 <body>
 
 <input id="cameraInput" type="file" accept="image/*" capture="environment" />
+
 <div id="message">СФОТКАЙ ПРОХОЖЕГО И УЗНАЙ КТО ОН</div>
 <div id="go">GO</div>
 
 <script>
+  // Инициализируем Mini App
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+
   const cameraInput = document.getElementById("cameraInput");
   const message = document.getElementById("message");
   const go = document.getElementById("go");
@@ -53,7 +58,7 @@
   cameraInput.addEventListener("change", () => {
     if (cameraInput.files && cameraInput.files.length > 0) {
       message.textContent = "ОН ДАЛБАЕБ";
-      go.style.display = "none"; // Скрываем GO после фото
+      go.style.display = "none";
     }
   });
 </script>
