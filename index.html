@@ -8,32 +8,16 @@
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <style>
-        body {
-            margin: 0; padding: 0; overflow: hidden;
-            background: #000; color: #0f0; font-family: monospace;
-        }
-        #video-container {
-            position: relative; width: 100vw; height: 100vh;
-        }
-        video, canvas {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
-        }
-        #ui-overlay {
-            position: absolute; top: 20px; left: 0; width: 100%;
-            text-align: center; z-index: 10;
-        }
-        #result {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 3rem; font-weight: bold; text-shadow: 0 0 10px #000;
-            display: none; padding: 20px; border-radius: 10px;
-            z-index: 20; text-align: center; width: 80%;
-        }
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; color: #0f0; font-family: monospace; }
+        #video-container { position: relative; width: 100vw; height: 100vh; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #ui-overlay { position: absolute; top: 20px; left: 0; width: 100%; text-align: center; }
+        #result { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; font-weight: bold; text-shadow: 0 0 10px #000; display: none; padding: 20px; border-radius: 10px; z-index: 20; text-align: center; width: 80%; }
         .status { background: rgba(0,0,0,0.6); padding: 5px; margin-top: 10px; }
-        #startButton {
-            background-color: #00ff00; color: #000; border: none; padding: 10px 20px;
-            font-size: 1rem; cursor: pointer; border-radius: 5px;
-        }
+        .button-wrapper { position: relative; display: inline-block; }
+        #startButton { background-color: #00ff00; color: #000; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 5px; pointer-events: none; /* Кнопка не реагирует на клики */ }
+        /* Элемент ввода файла будет расположен поверх кнопки и реагировать на клик */
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,7 +26,10 @@
     <video id="video" playsinline autocomplete="off"></video>
     <canvas id="output"></canvas>
     <div id="ui-overlay">
-        <button id="startButton">Начать сканирование</button>
+        <div class="button-wrapper">
+            <button id="startButton">Начать сканирование</button>
+            <input type="file" accept="image/*" capture="environment" id="fileInput">
+        </div>
         <div class="status">Ожидание действия пользователя...</div>
     </div>
     <div id="result"></div>
@@ -55,6 +42,7 @@
     const resultDiv = document.getElementById('result');
     const statusText = document.querySelector('.status');
     const startButton = document.getElementById('startButton');
+    const fileInput = document.getElementById('fileInput');
 
     let detector;
     let isScanning = false;
@@ -62,82 +50,65 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    async function setupCamera() {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' },
-            audio: false
-        });
-        video.srcObject = stream;
-        return new Promise((resolve) => {
-            video.onloadedmetadata = () => resolve(video);
-        });
-    }
-
     async function initDetector() {
         const model = poseDetection.SupportedModels.MoveNet;
         detector = await poseDetection.createDetector(model);
-        // renderPrediction(); // Переносим запуск в обработчик кнопки
     }
 
     function showVerdict() {
         if (isScanning) return;
         isScanning = true;
-
         const variants = ['ДАЛБАЁБ', 'НЕ ДАЛБАЁБ'];
         const colors = ['#ff0000', '#00ff00'];
         const rand = Math.random() > 0.5 ? 0 : 1;
-
         resultDiv.innerText = variants[rand];
         resultDiv.style.color = colors[rand];
         resultDiv.style.display = 'block';
         resultDiv.style.background = 'rgba(0,0,0,0.8)';
-
         setTimeout(() => {
             resultDiv.style.display = 'none';
             isScanning = false;
         }, 3000);
     }
 
-    async function renderPrediction() {
-        const poses = await detector.estimatePoses(video);
-        
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    async function processImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
 
-        if (poses.length > 0) {
-            const person = poses;
-            if (person.score > 0.4) {
-                statusText.innerText = "ОБЪЕКТ ОБНАРУЖЕН";
-                statusText.style.color = "#ff0";
-                if (!isScanning) showVerdict();
+        // Скрываем кнопку после выбора фото
+        startButton.style.display = 'none'; 
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            img.src = e.target.result;
+            img.onload = async () => {
+                canvas.width = window.innerWidth; // Адаптируем холст к размеру экрана
+                canvas.height = window.innerHeight;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height); // Рисуем фото на весь экран
+                statusText.innerText = "Анализ изображения...";
+                
+                const poses = await detector.estimatePoses(img);
+                if (poses.length > 0 && poses[0].score > 0.4) { // Проверяем первый найденный силуэт
+                    statusText.innerText = "ОБЪЕКТ ОБНАРУЖЕН";
+                    statusText.style.color = "#ff0";
+                    showVerdict();
+                } else {
+                    statusText.innerText = "Силуэт не найден на фото.";
+                }
+                 // Показываем кнопку снова через 4 секунды, чтобы пользователь мог сделать еще фото
+                 setTimeout(() => { startButton.style.display = 'inline-block'; }, 4000);
             }
-        } else {
-            statusText.innerText = "ПОИСК СИЛУЭТА...";
-            statusText.style.color = "#0f0";
-        }
-
-        requestAnimationFrame(renderPrediction);
+        };
+        reader.readAsDataURL(file);
     }
 
-    // Обработчик нажатия кнопки
-    startButton.addEventListener('click', async () => {
-        startButton.style.display = 'none';
-        statusText.innerText = "Запрос доступа к камере...";
-        try {
-            await setupCamera();
-            video.play();
-            await initDetector();
-            renderPrediction(); // Запуск цикла рендера после инициализации
-        } catch (error) {
-            statusText.innerText = "Ошибка доступа к камере! Проверьте разрешения в настройках смартфона.";
-            console.error(error);
-        }
-    });
-
+    // Обработчик выбора файла/фото
+    fileInput.addEventListener('change', processImage);
 
     async function main() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        // Все остальное перенесено в обработчик кнопки startButton
+        await initDetector();
     }
 
     main();
