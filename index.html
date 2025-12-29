@@ -3,32 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Scanner DONE</title>
-    <!-- Библиотеки ИИ 2025 года -->
+    <title>AI Photo Scanner</title>
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: 'Arial', sans-serif; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         #container { position: relative; width: 100vw; height: 100vh; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 10; pointer-events: none; }
-        
-        /* Кнопка старта обязательна для разблокировки камеры на iOS */
-        #overlay { position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
-        #status { color: #0f0; margin-top: 15px; font-family: monospace; font-size: 12px; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        video { z-index: 1; }
+        canvas { z-index: 5; display: none; }
+
+        /* Начальный экран */
+        #overlay { position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-start { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
+
+        /* Кнопка фото (появляется только при детекте) */
+        #shutter {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%) scale(0);
+            width: 80px; height: 80px; background: rgba(255, 255, 255, 0.4);
+            border: 5px solid #fff; border-radius: 50%; z-index: 50; cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; justify-content: center; align-items: center;
+        }
+        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
+        #shutter.visible { transform: translateX(-50%) scale(1); }
+
+        #status { color: #0f0; margin-top: 15px; font-family: monospace; }
     </style>
 </head>
 <body>
 
 <div id="container">
     <div id="overlay">
-        <button class="btn" id="startBtn">ЗАПУСТИТЬ ИИ</button>
-        <div id="status">ЗАГРУЗКА МОДЕЛЕЙ...</div>
+        <button class="btn-start" id="startBtn" style="display:none">ПОГНАЛИ</button>
+        <div id="status">ЗАГРУЗКА ИИ...</div>
     </div>
+
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
+    <div id="shutter"></div>
 </div>
 
 <script>
@@ -37,94 +51,96 @@
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    const shutter = document.getElementById('shutter');
     const status = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
     
-    let segmenter;
-    let isAIReady = false;
+    let net;
+    let isDetecting = false;
 
-    // 1. Инициализация ИИ
-    async function initAI() {
+    // 1. Инициализация BodyPix
+    async function init() {
         try {
-            await tf.ready();
-            const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
-            segmenter = await bodySegmentation.createSegmenter(model, {
-                runtime: 'tfjs', // Стабильнее для Safari/Telegram
-                modelType: 'landscape' // Быстрее для мобильных
+            await tf.setBackend('webgl');
+            net = await bodyPix.load({
+                architecture: 'MobileNetV1',
+                outputStride: 16,
+                multiplier: 0.5,
+                quantBytes: 2
             });
-            isAIReady = true;
-            status.innerText = "ИИ ГОТОВ. НАЖМИ СТАРТ.";
-            startBtn.style.opacity = "1";
+            status.innerText = "ИИ ГОТОВ";
+            startBtn.style.display = "block";
         } catch (e) {
-            status.innerText = "ОШИБКА: " + e.message;
+            status.innerText = "ОШИБКА ИИ";
         }
     }
 
-    // 2. Запуск камеры по клику
+    // 2. Запуск сканера
     startBtn.onclick = async () => {
-        if (!isAIReady) return;
-        
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment" },
                 audio: false
             });
             video.srcObject = stream;
-            
-            // Фикс для iOS/Telegram Mini App
             video.onloadedmetadata = () => {
                 video.play();
                 document.getElementById('overlay').style.display = 'none';
-                render();
+                isDetecting = true;
+                detect();
             };
         } catch (e) {
-            alert("Нет доступа к камере. Проверьте HTTPS и разрешения.");
+            alert("Нужен доступ к камере (HTTPS)");
         }
     };
 
-    // 3. Цикл детекции и отрисовки
-    async function render() {
-        if (video.paused || video.ended) return;
+    // 3. Постоянный анализ кадра
+    async function detect() {
+        if (!isDetecting || video.paused) return;
 
-        // Пытаемся найти силуэт
-        const segmentation = await segmenter.segmentPeople(video);
-        
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Если человек найден (хотя бы один силуэт в кадре)
-        if (segmentation.length > 0) {
-            drawDone();
+        const segmentation = await net.segmentPerson(video, {
+            internalResolution: 'low',
+            segmentationThreshold: 0.7
+        });
+
+        // Проверяем наличие силуэта (человеческих пикселей)
+        let personFound = false;
+        for (let i = 0; i < segmentation.data.length; i += 100) { // Проверка каждого 100-го пикселя для скорости
+            if (segmentation.data[i] === 1) {
+                personFound = true;
+                break;
+            }
         }
 
-        requestAnimationFrame(render);
+        // Показываем или скрываем кнопку
+        if (personFound) {
+            shutter.classList.add('visible');
+        } else {
+            shutter.classList.remove('visible');
+        }
+
+        requestAnimationFrame(detect);
     }
 
-    function drawDone() {
-        ctx.save();
-        const text = "DONE";
-        ctx.font = "900 100px Arial";
-        ctx.fillStyle = "#00ff00";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        
-        // Эффект свечения
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "#000";
-        
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-        ctx.restore();
-    }
+    // 4. Сделать фото
+    shutter.onclick = () => {
+        isDetecting = false; // Останавливаем ИИ
+        const ctx = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
 
-    // Подгонка холста
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
+        // Замораживаем картинку
+        canvas.style.display = "block";
+        shutter.classList.remove('visible');
 
-    initAI();
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+        // Системная кнопка ТГ для возврата
+        tg.MainButton.setText("СБРОСИТЬ").show().onClick(() => location.reload());
+    };
+
+    init();
 </script>
 </body>
 </html>
