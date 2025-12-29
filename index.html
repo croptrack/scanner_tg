@@ -3,92 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kisa Scan</title>
+    <title>Scanner</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: sans-serif; overflow: hidden; }
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: sans-serif; overflow: hidden; height: 100vh; }
+        #container { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
         
-        /* Холст с фото */
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 10; display: none; }
+        /* Слой с готовым фото */
+        #displayPhoto { position: absolute; width: 100%; height: 100%; object-fit: contain; display: none; z-index: 5; }
         
-        /* Кнопка запуска */
-        .ui { z-index: 100; text-align: center; }
-        .btn-wrapper { position: relative; width: 220px; height: 70px; }
-        .btn { width: 100%; height: 100%; background: #f0f; color: #000; border: none; border-radius: 15px; font-weight: bold; font-size: 1.5rem; text-transform: uppercase; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 110; }
+        /* Кнопка */
+        .ui { z-index: 10; text-align: center; }
+        .btn-box { position: relative; width: 220px; height: 70px; background: #f0f; border-radius: 15px; display: flex; align-items: center; justify-content: center; }
+        .btn-box span { color: #000; font-weight: bold; font-size: 1.5rem; }
+        #camInput { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
-        /* Надпись КИСА */
-        #verdict { 
+        /* Надпись */
+        #kisaLabel { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 1000; padding: 20px 40px; border: 8px solid #f0f; display: none;
+            z-index: 20; padding: 20px; border: 8px solid #f0f; display: none;
             background: rgba(0,0,0,0.8); font-size: 4rem; font-weight: 900;
-            color: #f0f; text-align: center; width: 80%; box-sizing: border-box;
-            text-shadow: 2px 2px 10px #000; pointer-events: none;
+            color: #f0f; text-align: center; width: 80%; pointer-events: none;
         }
     </style>
 </head>
 <body>
 
 <div id="container">
-    <canvas id="photoCanvas"></canvas>
-    <div id="verdict">КИСА</div>
+    <img id="displayPhoto">
+    <div id="kisaLabel">КИСА</div>
 
-    <div class="ui" id="mainUi">
-        <div class="btn-wrapper">
-            <button class="btn">ПОГНАЛИ</button>
-            <input type="file" accept="image/*" capture="user" id="fileInput">
+    <div class="ui" id="controls">
+        <div class="btn-box">
+            <span>ПОГНАЛИ</span>
+            <!-- Основной триггер камеры -->
+            <input type="file" accept="image/*" capture="user" id="camInput">
         </div>
     </div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
-    tg.expand();
     tg.ready();
+    tg.expand();
 
-    const fileInput = document.getElementById('fileInput');
-    const canvas = document.getElementById('photoCanvas');
-    const ctx = canvas.getContext('2d');
-    const verdict = document.getElementById('verdict');
-    const mainUi = document.getElementById('mainUi');
+    const camInput = document.getElementById('camInput');
+    const displayPhoto = document.getElementById('displayPhoto');
+    const kisaLabel = document.getElementById('kisaLabel');
+    const controls = document.getElementById('controls');
 
-    fileInput.onchange = function(e) {
-        if (!e.target.files || e.target.files.length === 0) return;
+    camInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-        // ПРЯЧЕМ КНОПКУ СРАЗУ
-        mainUi.style.display = "none";
+        // 1. Сразу прячем кнопку, чтобы не мешала
+        controls.style.display = 'none';
 
+        // 2. Читаем фото
         const reader = new FileReader();
         reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                // Рисуем фото на весь экран
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                canvas.style.display = "block";
+            // 3. Показываем картинку
+            displayPhoto.src = event.target.result;
+            displayPhoto.style.display = 'block';
 
-                // ПОКАЗЫВАЕМ НАДПИСЬ
-                setTimeout(() => {
-                    verdict.style.display = 'block';
-                    
-                    if (tg.HapticFeedback) {
-                        tg.HapticFeedback.notificationOccurred('success');
-                    }
+            // 4. Выводим КИСА через полсекунды
+            setTimeout(() => {
+                kisaLabel.style.display = 'block';
+                
+                // Тряска телефона
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 
-                    // Системная кнопка Telegram для перезапуска
-                    tg.MainButton.setText("ЗАНОВО");
-                    tg.MainButton.show();
-                    tg.MainButton.onClick(() => {
-                        location.reload();
-                    });
-                }, 300);
-            };
-            img.src = event.target.result;
+                // Кнопка перезапуска от самого Telegram
+                tg.MainButton.setText("ЗАНОВО");
+                tg.MainButton.show();
+                tg.MainButton.onClick(() => {
+                    location.reload();
+                });
+            }, 500);
         };
-        reader.readAsDataURL(e.target.files[0]);
-    };
+        reader.readAsDataURL(file);
+    });
 </script>
 </body>
 </html>
