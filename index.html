@@ -3,22 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
+    <title>Scanner 3000</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: sans-serif; overflow: hidden; height: 100vh; }
-        #container { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: sans-serif; overflow: hidden; width: 100vw; height: 100vh; }
+        #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         
-        /* Слой с готовым фото */
-        #displayPhoto { position: absolute; width: 100%; height: 100%; object-fit: contain; display: none; z-index: 5; }
+        /* Живое видео с камеры */
+        video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         
-        /* Кнопка */
-        .ui { z-index: 10; text-align: center; }
-        .btn-box { position: relative; width: 220px; height: 70px; background: #f0f; border-radius: 15px; display: flex; align-items: center; justify-content: center; }
-        .btn-box span { color: #000; font-weight: bold; font-size: 1.5rem; }
-        #camInput { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        /* Холст для стоп-кадра */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; display: none; }
 
-        /* Надпись */
+        /* Интерфейс управления */
+        .controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: space-evenly; align-items: center; z-index: 10; }
+        
+        #shutter { width: 70px; height: 70px; background: rgba(255,255,255,0.3); border: 5px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
+        #shutter::after { content: ''; width: 50px; height: 50px; background: #fff; border-radius: 50%; }
+        
+        #switchBtn { width: 50px; height: 50px; background: rgba(0,0,0,0.5); border: 2px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #fff; cursor: pointer; }
+
+        /* Та самая надпись */
         #kisaLabel { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 20; padding: 20px; border: 8px solid #f0f; display: none;
@@ -30,15 +35,14 @@
 <body>
 
 <div id="container">
-    <img id="displayPhoto">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="photoCanvas"></canvas>
     <div id="kisaLabel">КИСА</div>
 
-    <div class="ui" id="controls">
-        <div class="btn-box">
-            <span>ПОГНАЛИ</span>
-            <!-- Основной триггер камеры -->
-            <input type="file" accept="image/*" capture="user" id="camInput">
-        </div>
+    <div class="controls" id="ui">
+        <div id="switchBtn" onclick="toggleCamera()">🔄</div>
+        <div id="shutter" onclick="takePhoto()"></div>
+        <div style="width: 50px;"></div> <!-- Для центровки -->
     </div>
 </div>
 
@@ -47,42 +51,75 @@
     tg.ready();
     tg.expand();
 
-    const camInput = document.getElementById('camInput');
-    const displayPhoto = document.getElementById('displayPhoto');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('photoCanvas');
     const kisaLabel = document.getElementById('kisaLabel');
-    const controls = document.getElementById('controls');
+    const ui = document.getElementById('ui');
+    let currentStream = null;
+    let isFrontCamera = false; // По умолчанию задняя
 
-    camInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+    // Функция запуска камеры
+    async function startCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
 
-        // 1. Сразу прячем кнопку, чтобы не мешала
-        controls.style.display = 'none';
-
-        // 2. Читаем фото
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            // 3. Показываем картинку
-            displayPhoto.src = event.target.result;
-            displayPhoto.style.display = 'block';
-
-            // 4. Выводим КИСА через полсекунды
-            setTimeout(() => {
-                kisaLabel.style.display = 'block';
-                
-                // Тряска телефона
-                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-
-                // Кнопка перезапуска от самого Telegram
-                tg.MainButton.setText("ЗАНОВО");
-                tg.MainButton.show();
-                tg.MainButton.onClick(() => {
-                    location.reload();
-                });
-            }, 500);
+        const constraints = {
+            video: {
+                facingMode: isFrontCamera ? "user" : "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
         };
-        reader.readAsDataURL(file);
-    });
+
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+        } catch (err) {
+            console.error("Ошибка камеры:", err);
+            alert("Камера недоступна. Убедитесь, что используете HTTPS и разрешили доступ.");
+        }
+    }
+
+    // Переключение камеры
+    function toggleCamera() {
+        isFrontCamera = !isFrontCamera;
+        startCamera();
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
+
+    // Сделать фото
+    function takePhoto() {
+        const ctx = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Рисуем кадр
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Останавливаем поток
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
+
+        video.style.display = 'none';
+        ui.style.display = 'none';
+        canvas.style.display = 'block';
+
+        // Показываем надпись
+        setTimeout(() => {
+            kisaLabel.style.display = 'block';
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+            // Кнопка Телеграм для сброса
+            tg.MainButton.setText("ЗАНОВО");
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => location.reload());
+        }, 300);
+    }
+
+    // Запуск при загрузке
+    startCamera();
 </script>
 </body>
 </html>
