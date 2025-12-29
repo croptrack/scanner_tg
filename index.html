@@ -3,134 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Skaner 3000 - Face Edition</title>
-    <!-- Подключаем скрипты Telegram и TensorFlow для лиц -->
+    <title>Skaner 3000</title>
     <script src="telegram.org"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #000; color: #0f0; font-family: monospace; }
-        #video-container { position: relative; width: 100vw; height: 100vh; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        #ui-overlay { position: absolute; top: 20px; left: 0; width: 100%; text-align: center; z-index: 10; }
-        #result { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; font-weight: bold; text-shadow: 0 0 10px #000; display: none; padding: 20px; border-radius: 10px; z-index: 20; text-align: center; width: 80%; }
-        .status { background: rgba(0,0,0,0.6); padding: 5px; margin-top: 10px; border: 1px solid #0f0; }
-        .button-wrapper { position: relative; display: inline-block; }
-        #startButton { background-color: #00ff00; color: #000; border: none; padding: 15px 30px; font-size: 1.2rem; cursor: pointer; border-radius: 5px; font-weight: bold; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+        #ui-overlay { position: relative; z-index: 10; width: 100%; text-align: center; margin-top: 20px; }
+        .status { background: rgba(0,0,0,0.8); padding: 8px; margin: 10px auto; width: 80%; border: 1px solid #0f0; font-size: 14px; min-height: 20px; }
+        #result { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            font-size: 2.5rem; font-weight: bold; text-shadow: 0 0 15px #000; 
+            display: none; padding: 25px; border-radius: 15px; z-index: 100; 
+            text-align: center; width: 85%; border: 4px solid; background: rgba(0,0,0,0.9);
+        }
+        .btn-box { position: relative; display: inline-block; margin-top: 10px; }
+        #startButton { background: #0f0; color: #000; border: none; padding: 15px 30px; font-size: 1.1rem; font-weight: bold; border-radius: 8px; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
     </style>
 </head>
 <body>
 
-<div id="video-container">
+<div id="container">
     <canvas id="output"></canvas>
     <div id="ui-overlay">
-        <div class="button-wrapper">
-            <button id="startButton">СКАНЕР ЛИЦА</button>
+        <div class="status" id="statusBox">ЗАГРУЗКА СИСТЕМЫ...</div>
+        <div class="btn-box">
+            <button id="startButton">СДЕЛАТЬ СКАН</button>
             <input type="file" accept="image/*" capture="user" id="fileInput">
         </div>
-        <div class="status">СИСТЕМА ГОТОВА...</div>
     </div>
     <div id="result"></div>
 </div>
 
 <script>
-    const canvas = document.getElementById('output');
-    const ctx = canvas.getContext('2d');
-    const resultDiv = document.getElementById('result');
-    const statusText = document.querySelector('.status');
-    const startButton = document.getElementById('startButton');
-    const fileInput = document.getElementById('fileInput');
-
-    let detector;
-    let isScanning = false;
-
-    // Инициализация Telegram
     const tg = window.Telegram.WebApp;
     tg.expand();
     tg.ready();
 
-    // Загрузка модели распознавания лиц
-    async function initDetector() {
-        statusText.innerText = "ЗАГРУЗКА НЕЙРОСЕТИ...";
-        const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
-        const detectorConfig = { runtime: 'tfjs', modelType: 'short' }; // 'short' идеален для селфи
-        detector = await faceDetection.createDetector(model, detectorConfig);
-        statusText.innerText = "НЕЙРОСЕТЬ ЗАГРУЖЕНА. ЖДУ ФОТО.";
+    const canvas = document.getElementById('output');
+    const ctx = canvas.getContext('2d');
+    const statusBox = document.getElementById('statusBox');
+    const resultDiv = document.getElementById('result');
+    const fileInput = document.getElementById('fileInput');
+
+    let detector;
+
+    // Инициализация нейросети
+    async function init() {
+        try {
+            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+            detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
+            statusBox.innerText = "СИСТЕМА ГОТОВА. ЖДУ ФОТО.";
+        } catch (e) {
+            statusBox.innerText = "ОШИБКА ЗАГРУЗКИ";
+        }
     }
 
-    function showVerdict() {
-        if (isScanning) return;
-        isScanning = true;
-        
-        const variants = ['ДАЛБАЁБ', 'НЕ ДАЛБАЁБ'];
-        const colors = ['#ff0000', '#00ff00'];
-        const rand = Math.random() > 0.5 ? 0 : 1;
-
-        resultDiv.innerText = variants[rand];
-        resultDiv.style.color = colors[rand];
-        resultDiv.style.display = 'block';
-        resultDiv.style.background = 'rgba(0,0,0,0.9)';
-        
-        setTimeout(() => {
-            resultDiv.style.display = 'none';
-            isScanning = false;
-            statusText.innerText = "ГОТОВ К НОВОМУ СКАНУ";
-        }, 4000);
-    }
-
-    async function processImage(event) {
+    fileInput.onchange = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
-        statusText.innerText = "ЧТЕНИЕ ДАННЫХ...";
+        statusBox.innerText = "АНАЛИЗ... ПОДОЖДИТЕ";
+        resultDiv.style.display = 'none';
+
         const img = new Image();
-        const reader = new FileReader();
+        img.src = URL.createObjectURL(file);
 
-        reader.onload = (e) => {
-            img.src = e.target.result;
-            img.onload = async () => {
-                // Подгоняем размер холста под фото
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
+        img.onload = async () => {
+            // Подгоняем холст
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            try {
+                const faces = await detector.estimateFaces(img);
                 
-                statusText.innerText = "АНАЛИЗ ЛИЦА...";
-                
-                try {
-                    // Ищем лица
-                    const faces = await detector.estimateFaces(img);
+                if (faces && faces.length > 0) {
+                    statusBox.innerText = "ОБЪЕКТ ИДЕНТИФИЦИРОВАН";
                     
-                    if (faces.length > 0) {
-                        statusText.innerText = `НАЙДЕНО ЛИЦ: ${faces.length}. ОПРЕДЕЛЕНИЕ ТИПА...`;
-                        statusText.style.color = "#0f0";
-                        
-                        // Рисуем рамку вокруг лица для эффекта
-                        faces.forEach(face => {
-                            const { yMin, xMin, width, height } = face.box;
-                            ctx.strokeStyle = "#0f0";
-                            ctx.lineWidth = 5;
-                            ctx.strokeRect(xMin, yMin, width, height);
-                        });
+                    // Рисуем рамку
+                    ctx.strokeStyle = "#0f0";
+                    ctx.lineWidth = Math.round(img.width / 50);
+                    faces.forEach(f => {
+                        ctx.strokeRect(f.box.xMin, f.box.yMin, f.box.width, f.box.height);
+                    });
 
-                        setTimeout(showVerdict, 1000);
-                    } else {
-                        statusText.innerText = "ЛИЦО НЕ НАЙДЕНО. ПОПРОБУЙТЕ ЕЩЕ РАЗ.";
-                        statusText.style.color = "#f00";
-                    }
-                } catch (err) {
-                    console.error(err);
-                    statusText.innerText = "ОШИБКА НЕЙРОСЕТИ";
+                    // Показываем вердикт через небольшую паузу
+                    setTimeout(showVerdict, 800);
+                } else {
+                    statusBox.innerText = "ЛИЦО НЕ НАЙДЕНО. ПОВТОРИТЕ.";
                 }
+            } catch (err) {
+                statusBox.innerText = "СБОЙ СКАНЕРА";
             }
         };
-        reader.readAsDataURL(file);
+    };
+
+    function showVerdict() {
+        const isBad = Math.random() > 0.5;
+        resultDiv.innerText = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
+        resultDiv.style.color = isBad ? '#ff0000' : '#00ff00';
+        resultDiv.style.borderColor = isBad ? '#ff0000' : '#00ff00';
+        resultDiv.style.display = 'block';
+        
+        statusBox.innerText = "СКАНИРОВАНИЕ ЗАВЕРШЕНО";
+        
+        // Вибрация телефона (если поддерживается)
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
     }
 
-    fileInput.addEventListener('change', processImage);
-
-    // Запуск
-    initDetector();
+    init();
 </script>
 </body>
 </html>
