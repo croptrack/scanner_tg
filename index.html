@@ -3,147 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Scanner</title>
-    <!-- Библиотеки ИИ 2025 года -->
-    <script src="unpkg.com"></script>
-    <script src="unpkg.com"></script>
+    <title>Smart Scanner</title>
+    <!-- Самые легкие библиотеки для детекции предметов -->
+    <script src="cdn.jsdelivr.net"></script>
+    <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
-        #container { position: relative; width: 100vw; height: 100vh; }
+        #container { position: relative; width: 100%; height: 100%; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         video { z-index: 1; }
         canvas { z-index: 5; display: none; }
-        #overlay { position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn-start { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; display: none; }
+
+        /* Кнопка "Сфотать" */
         #shutter {
-            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%) scale(0);
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) scale(0);
             width: 80px; height: 80px; background: rgba(255, 255, 255, 0.4);
-            border: 5px solid #fff; border-radius: 50%; z-index: 50; cursor: pointer;
+            border: 5px solid #fff; border-radius: 50%; z-index: 100; cursor: pointer;
             transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; justify-content: center; align-items: center;
         }
-        #shutter::after { content: ''; position: absolute; top: 5px; left: 5px; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
+        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
         #shutter.visible { transform: translateX(-50%) scale(1); }
-        #status { color: #0f0; margin-top: 15px; font-family: monospace; font-size: 14px; text-align: center; max-width: 80%; }
+
+        /* Плашка статуса */
+        #info { 
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.6); color: #0f0; padding: 8px 15px;
+            border-radius: 20px; font-size: 12px; z-index: 110; pointer-events: none;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
     </style>
 </head>
 <body>
+
 <div id="container">
-    <div id="overlay">
-        <button class="btn-start" id="startBtn">ПОГНАЛИ</button>
-        <div id="status">ЗАГРУЗКА ИИ МОЗГА...</div>
-    </div>
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-    <div id="shutter"></div>
+    <div id="info">Запуск камеры...</div>
+    <video id="v" autoplay playsinline muted></video>
+    <canvas id="c"></canvas>
+    <div id="shutter" onclick="takePhoto()"></div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
+    const video = document.getElementById('v');
+    const canvas = document.getElementById('c');
+    const info = document.getElementById('info');
     const shutter = document.getElementById('shutter');
-    const status = document.getElementById('status');
-    const startBtn = document.getElementById('startBtn');
-    
-    let net;
-    let isDetecting = false;
+    let model;
 
-    // Инициализация ИИ
-    async function init() {
-        try {
-            status.innerText = "ШАГ 1: ПОДКЛЮЧЕНИЕ TFJS...";
-            await tf.ready();
-            
-            // Пробуем включить ускорение. Если не вышло — работаем на CPU.
-            try {
-                await tf.setBackend('webgl');
-            } catch (e) {
-                await tf.setBackend('cpu');
-                console.log("Используется CPU");
-            }
-
-            status.innerText = "ШАГ 2: ЗАГРУЗКА МОДЕЛИ (3 МБ)...";
-            net = await bodyPix.load({
-                architecture: 'MobileNetV1',
-                outputStride: 16,
-                multiplier: 0.5,
-                quantBytes: 2
-            });
-
-            status.innerText = "СИСТЕМА ГОТОВА";
-            startBtn.style.display = "block";
-        } catch (e) {
-            status.innerText = "ОШИБКА: НЕТ СВЯЗИ С ИИ. ПРОВЕРЬ ИНТЕРНЕТ ИЛИ ОБНОВИ ТГ.";
-            console.error(e);
-        }
-    }
-
-    startBtn.onclick = async () => {
+    // 1. Включаем камеру мгновенно
+    async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: "environment" },
                 audio: false
             });
             video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                video.play();
-                document.getElementById('overlay').style.display = 'none';
-                isDetecting = true;
-                detect();
-            };
-        } catch (e) {
-            alert("КАМЕРА ЗАБЛОКИРОВАНА. НУЖЕН HTTPS.");
-        }
-    };
-
-    async function detect() {
-        if (!isDetecting || video.paused) return;
-
-        try {
-            const segmentation = await net.segmentPerson(video, {
-                internalResolution: 'low',
-                segmentationThreshold: 0.7
-            });
-
-            let personFound = false;
-            // Проверяем наличие человека (выборочно для скорости)
-            for (let i = 0; i < segmentation.data.length; i += 100) {
-                if (segmentation.data[i] === 1) {
-                    personFound = true;
-                    break;
-                }
-            }
-
-            if (personFound) {
-                shutter.classList.add('visible');
-            } else {
-                shutter.classList.remove('visible');
-            }
+            // После запуска камеры грузим ИИ
+            initAI();
         } catch (err) {
-            console.error("Ошибка детекции:", err);
+            info.innerText = "Ошибка камеры: Нужен HTTPS";
+            info.style.color = "red";
+        }
+    }
+
+    // 2. Подгружаем легкую модель детекции предметов
+    async function initAI() {
+        info.innerText = "ИИ: Загрузка мозга...";
+        try {
+            model = await cocoSsd.load();
+            info.innerText = "ИИ: Ищу объекты...";
+            detect();
+        } catch (e) {
+            info.innerText = "ИИ: Ошибка сети";
+        }
+    }
+
+    // 3. Анализ кадра
+    async function detect() {
+        if (!model || video.paused) return;
+
+        // Ищем объекты (человек, телефон, чашка и т.д.)
+        const predictions = await model.detect(video);
+        
+        // Если нашли хоть что-то с уверенностью > 50%
+        const found = predictions.filter(p => p.score > 0.5);
+
+        if (found.length > 0) {
+            info.innerText = "Вижу: " + found[0].class;
+            shutter.classList.add('visible');
+        } else {
+            info.innerText = "ИИ: Наведи на предмет";
+            shutter.classList.remove('visible');
         }
 
+        // Повторяем
         requestAnimationFrame(detect);
     }
 
-    shutter.onclick = () => {
-        isDetecting = false;
+    // 4. Фото
+    function takePhoto() {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
-
-        canvas.style.display = "block";
+        
+        canvas.style.display = 'block';
         shutter.classList.remove('visible');
+        info.innerText = "Готово";
 
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
         tg.MainButton.setText("ЗАНОВО").show().onClick(() => location.reload());
-    };
+    }
 
-    init();
+    window.onload = startCamera;
 </script>
 </body>
 </html>
