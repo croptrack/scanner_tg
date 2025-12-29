@@ -27,7 +27,7 @@
 <body>
 
 <input id="cameraInput" type="file" accept="image/*" capture="environment" />
-<div id="message">TAP TO OPEN CAMERA</div>
+<div id="message">СФОТКАЙ ПРОХОЖЕГО И УЗНАЙ КТО ОН</div>
 
 <script>
   const cameraInput = document.getElementById("cameraInput");
@@ -39,9 +39,8 @@
   });
 
   cameraInput.addEventListener("change", () => {
-    // Если фото сделано / выбран файл
     if (cameraInput.files && cameraInput.files.length > 0) {
-      message.textContent = "DONE";
+      message.textContent = "ОН ДАЛБАЕБ";
     }
   });
 </script>
