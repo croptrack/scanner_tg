@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Scanner 2025</title>
-    <!-- Используем максимально стабильные CDN ссылки -->
+    <title>AI Scanner Debug</title>
+    
+    <!-- КОНСОЛЬ ОТЛАДКИ (Шестеренка появится в углу) -->
+    <script src="cdn.jsdelivr.net"></script>
+    <script>eruda.init();</script>
+
+    <!-- Библиотеки ИИ 2025 -->
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
+
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
         video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
@@ -18,10 +24,10 @@
 </head>
 <body>
 
-    <div id="info">СИСТЕМА ГОТОВА. ОЖИДАНИЕ ЗАПУСКА...</div>
+    <div id="info">СИСТЕМА ГОТОВА. НАЖМИТЕ СТАРТ.</div>
     <video id="v" autoplay playsinline muted></video>
     <canvas id="c"></canvas>
-    <button id="startBtn">ВКЛЮЧИТЬ ИИ</button>
+    <button id="startBtn">ПОГНАЛИ</button>
 
 <script>
     const tg = window.Telegram.WebApp;
@@ -37,7 +43,7 @@
 
     btn.onclick = async () => {
         btn.style.display = "none";
-        info.innerText = "ШАГ 1: ЗАПУСК КАМЕРЫ...";
+        info.innerText = "ШАГ 1: ДОСТУП К КАМЕРЕ...";
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -49,32 +55,35 @@
             
             initAI();
         } catch (err) {
-            info.innerText = "ОШИБКА КАМЕРЫ: НУЖЕН HTTPS!";
+            info.innerText = "ОШИБКА: НУЖЕН HTTPS И РАЗРЕШЕНИЕ В НАСТРОЙКАХ ТГ";
             info.style.color = "red";
+            console.error("Camera error:", err);
         }
     };
 
     async function initAI() {
-        info.innerText = "ШАГ 2: ПОДКЛЮЧЕНИЕ МОЗГА ИИ...";
+        info.innerText = "ШАГ 2: ПОДГОТОВКА ЯДРА TFJS...";
         try {
-            // Принудительно ждем готовности TensorFlow
             await tf.ready();
             
-            // Если WebGL (видеокарта) недоступна, используем CPU
-            await tf.setBackend('cpu'); 
-            console.log("Backend set to CPU for stability");
+            // Проверка бэкенда (WebGL или CPU)
+            try {
+                await tf.setBackend('webgl');
+                console.log("Используется WebGL (GPU)");
+            } catch (e) {
+                await tf.setBackend('cpu');
+                console.warn("WebGL заблокирован, переключаюсь на CPU");
+            }
             
-            info.innerText = "ШАГ 3: ЗАГРУЗКА МОДЕЛИ (ОКОЛО 5МБ)...";
-            
-            // Загружаем модель
+            info.innerText = "ШАГ 3: ЗАГРУЗКА МОДЕЛИ (5 МБ)...";
             model = await cocoSsd.load();
             
-            info.innerText = "ИИ АКТИВИРОВАН. ИЩУ ПРЕДМЕТЫ...";
+            info.innerText = "ИИ АКТИВИРОВАН. ИЩУ ОБЪЕКТЫ.";
             detectFrame();
         } catch (e) {
-            info.innerText = "ОШИБКА ИИ: " + e.message;
+            info.innerText = "КРИТИЧЕСКАЯ ОШИБКА ИИ. ПРОВЕРЬ КОНСОЛЬ (ШЕСТЕРЕНКА).";
             info.style.color = "red";
-            console.error(e);
+            console.error("AI Init Error:", e);
         }
     }
 
@@ -90,18 +99,18 @@
 
             predictions.forEach(p => {
                 if (p.score > 0.6) {
-                    info.innerText = `ВИЖУ: ${p.class.toUpperCase()}`;
+                    info.innerText = `ОБЪЕКТ: ${p.class.toUpperCase()}`;
                     ctx.strokeStyle = "#0f0";
                     ctx.lineWidth = 6;
                     ctx.strokeRect(...p.bbox);
                     
                     ctx.fillStyle = "#0f0";
-                    ctx.font = "bold 30px monospace";
+                    ctx.font = "bold 30px Arial";
                     ctx.fillText(p.class, p.bbox[0], p.bbox[1] > 40 ? p.bbox[1] - 10 : 40);
                 }
             });
         } catch (err) {
-            console.error("Ошибка детекции:", err);
+            console.error("Detection loop error:", err);
         }
 
         requestAnimationFrame(detectFrame);
