@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Photo Scanner</title>
+    <title>AI Scanner 2025</title>
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
@@ -13,33 +13,25 @@
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         video { z-index: 1; }
         canvas { z-index: 5; display: none; }
-
-        /* Начальный экран */
         #overlay { position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .btn-start { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
-
-        /* Кнопка фото (появляется только при детекте) */
         #shutter {
             position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%) scale(0);
             width: 80px; height: 80px; background: rgba(255, 255, 255, 0.4);
             border: 5px solid #fff; border-radius: 50%; z-index: 50; cursor: pointer;
             transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            display: flex; justify-content: center; align-items: center;
         }
-        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
+        #shutter::after { content: ''; position: absolute; top: 5px; left: 5px; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
         #shutter.visible { transform: translateX(-50%) scale(1); }
-
-        #status { color: #0f0; margin-top: 15px; font-family: monospace; }
+        #status { color: #0f0; margin-top: 15px; font-family: monospace; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
-
 <div id="container">
     <div id="overlay">
         <button class="btn-start" id="startBtn" style="display:none">ПОГНАЛИ</button>
-        <div id="status">ЗАГРУЗКА ИИ...</div>
+        <div id="status">ИНИЦИАЛИЗАЦИЯ ИИ...</div>
     </div>
-
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
     <div id="shutter"></div>
@@ -58,24 +50,22 @@
     let net;
     let isDetecting = false;
 
-    // 1. Инициализация BodyPix
     async function init() {
         try {
-            await tf.setBackend('webgl');
+            await tf.setBackend('webgl'); // Форсируем GPU
             net = await bodyPix.load({
                 architecture: 'MobileNetV1',
                 outputStride: 16,
                 multiplier: 0.5,
                 quantBytes: 2
             });
-            status.innerText = "ИИ ГОТОВ";
+            status.innerText = "ИИ ГОТОВ К СКАНУ";
             startBtn.style.display = "block";
         } catch (e) {
-            status.innerText = "ОШИБКА ИИ";
+            status.innerText = "ОШИБКА ЗАГРУЗКИ";
         }
     }
 
-    // 2. Запуск сканера
     startBtn.onclick = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -90,30 +80,27 @@
                 detect();
             };
         } catch (e) {
-            alert("Нужен доступ к камере (HTTPS)");
+            alert("Камера заблокирована. Нужен HTTPS и разрешение.");
         }
     };
 
-    // 3. Постоянный анализ кадра
     async function detect() {
         if (!isDetecting || video.paused) return;
 
+        // Быстрая сегментация
         const segmentation = await net.segmentPerson(video, {
             internalResolution: 'low',
             segmentationThreshold: 0.7
         });
 
-        // Проверяем наличие силуэта (человеческих пикселей)
-        let personFound = false;
-        for (let i = 0; i < segmentation.data.length; i += 100) { // Проверка каждого 100-го пикселя для скорости
-            if (segmentation.data[i] === 1) {
-                personFound = true;
-                break;
-            }
+        // Считаем пиксели человека для стабильности
+        let personPixels = 0;
+        for (let i = 0; i < segmentation.data.length; i += 50) {
+            if (segmentation.data[i] === 1) personPixels++;
         }
 
-        // Показываем или скрываем кнопку
-        if (personFound) {
+        // Показываем кнопку, если человек занимает >1% кадра
+        if (personPixels > (segmentation.data.length / 50) * 0.01) {
             shutter.classList.add('visible');
         } else {
             shutter.classList.remove('visible');
@@ -122,21 +109,18 @@
         requestAnimationFrame(detect);
     }
 
-    // 4. Сделать фото
     shutter.onclick = () => {
-        isDetecting = false; // Останавливаем ИИ
+        isDetecting = false;
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        // Замораживаем картинку
         canvas.style.display = "block";
         shutter.classList.remove('visible');
 
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 
-        // Системная кнопка ТГ для возврата
         tg.MainButton.setText("СБРОСИТЬ").show().onClick(() => location.reload());
     };
 
