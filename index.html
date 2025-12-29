@@ -4,37 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Skaner 3000</title>
-    <!-- Библиотеки ИИ (TensorFlow + Face Detection) -->
-    <script src="cdn.jsdelivr.net"></script>
-    <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
-        #container { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
+        #container { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
+        /* Холст с фото */
+        #photoCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 1; display: none; }
+        
+        /* Интерфейс */
         .ui { z-index: 10; text-align: center; width: 100%; }
-        #statusBox { background: rgba(0,255,0,0.1); border: 1px solid #0f0; padding: 10px; margin: 10px; font-size: 12px; }
+        #statusBox { background: rgba(0,255,0,0.1); border: 1px solid #0f0; padding: 12px; margin: 20px; font-size: 14px; text-transform: uppercase; }
+        
+        /* Кнопка */
+        .btn-wrapper { position: relative; display: inline-block; }
+        .btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 12px; font-weight: bold; font-size: 1.2rem; cursor: pointer; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+        /* Финальный вердикт */
         #result { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 100; padding: 20px; border: 4px solid; display: none;
-            background: rgba(0,0,0,0.9); font-size: 2rem; font-weight: bold;
+            z-index: 100; padding: 30px; border: 6px solid; display: none;
+            background: rgba(0,0,0,0.9); font-size: 2.5rem; font-weight: bold;
+            text-align: center; width: 80%; box-sizing: border-box;
         }
-        .btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 10px; font-weight: bold; position: relative; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
     </style>
 </head>
 <body>
 
 <div id="container">
-    <canvas id="output"></canvas>
+    <canvas id="photoCanvas"></canvas>
+    
     <div id="result"></div>
-    <div class="ui">
-        <div id="statusBox">ЗАГРУЗКА ИИ МОЗГА...</div>
-        <div id="btnContainer" style="display: none;">
-            <div class="btn">
-                СКАН ОБЪЕКТА
-                <input type="file" accept="image/*" id="fileInput">
-            </div>
+
+    <div class="ui" id="mainUi">
+        <div id="statusBox">СИСТЕМА ГОТОВА К СКАНУ</div>
+        <div class="btn-wrapper">
+            <button class="btn">СДЕЛАТЬ СКАН</button>
+            <input type="file" accept="image/*" capture="user" id="fileInput">
         </div>
     </div>
 </div>
@@ -42,91 +49,66 @@
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+    tg.ready();
 
-    const statusBox = document.getElementById('statusBox');
-    const btnContainer = document.getElementById('btnContainer');
     const fileInput = document.getElementById('fileInput');
-    const canvas = document.getElementById('output');
+    const canvas = document.getElementById('photoCanvas');
     const ctx = canvas.getContext('2d');
+    const statusBox = document.getElementById('statusBox');
     const resultDiv = document.getElementById('result');
+    const mainUi = document.getElementById('mainUi');
 
-    let detector;
-
-    // 1. Загрузка ИИ
-    async function loadAI() {
-        try {
-            statusBox.innerText = "ИНИЦИАЛИЗАЦИЯ TFJS...";
-            await tf.ready();
-            
-            // Пытаемся включить ускорение, если нет - работаем на обычном движке
-            await tf.setBackend('webgl').catch(() => tf.setBackend('cpu'));
-            
-            statusBox.innerText = "ЗАГРУЗКА МОДЕЛИ ЛИЦА...";
-            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
-            detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
-            
-            statusBox.innerText = "СИСТЕМА ГОТОВА";
-            btnContainer.style.display = 'block'; // Показываем кнопку только когда ИИ готов
-        } catch (e) {
-            statusBox.innerText = "ОШИБКА: " + e.message;
-        }
-    }
-
-    // 2. Обработка фото
-    fileInput.onchange = async (e) => {
+    fileInput.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        resultDiv.style.display = 'none';
-        statusBox.innerText = "ЧТЕНИЕ ОБЪЕКТА...";
+        // Скрываем кнопку, чтобы не мешала смотреть результат
+        mainUi.style.opacity = "0";
+        statusBox.innerText = "АНАЛИЗ ДАННЫХ...";
 
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
-            img.onload = async () => {
-                // Настройка холста
+            img.onload = () => {
+                // Отображаем фото на весь экран
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
+                canvas.style.display = "block";
 
-                statusBox.innerText = "ИИ СКАНИРУЕТ СТРУКТУРУ...";
-
-                try {
-                    // ИИ ищет лицо на холсте
-                    const faces = await detector.estimateFaces(canvas);
-
-                    if (faces.length > 0) {
-                        statusBox.innerText = "ОБЪЕКТ РАСПОЗНАН";
-                        // Рисуем рамку вокруг лица
-                        ctx.strokeStyle = "#0f0";
-                        ctx.lineWidth = img.width * 0.02;
-                        faces.forEach(f => ctx.strokeRect(f.box.xMin, f.box.yMin, f.box.width, f.box.height));
-                        
-                        setTimeout(showVerdict, 800);
-                    } else {
-                        statusBox.innerText = "ОШИБКА: ЛИЦО НЕ НАЙДЕНО";
-                    }
-                } catch (err) {
-                    statusBox.innerText = "СБОЙ ИИ: " + err.message;
-                }
+                // Задержка для эффекта "сканирования"
+                setTimeout(showRandomVerdict, 1000);
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
     };
 
-    function showVerdict() {
+    function showRandomVerdict() {
         const isBad = Math.random() > 0.5;
-        resultDiv.innerText = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
-        resultDiv.style.color = isBad ? '#f00' : '#0f0';
-        resultDiv.style.borderColor = isBad ? '#f00' : '#0f0';
-        resultDiv.style.display = 'block';
-        statusBox.innerText = "СКАНИРОВАНИЕ ЗАВЕРШЕНО";
         
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
-    }
+        // Текст
+        resultDiv.innerText = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
+        
+        // Цвета
+        const color = isBad ? '#ff0000' : '#00ff00';
+        resultDiv.style.color = color;
+        resultDiv.style.borderColor = color;
+        
+        // Показ
+        resultDiv.style.display = 'block';
+        
+        // Вибрация Telegram
+        if (tg.HapticFeedback) {
+            tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
+        }
 
-    loadAI();
+        // Кнопка перезагрузки (через 3 секунды можно снова)
+        setTimeout(() => {
+            statusBox.innerText = "НАЖМИТЕ ДЛЯ ПОВТОРНОГО СКАНА";
+            mainUi.style.opacity = "1";
+        }, 2000);
+    }
 </script>
 </body>
 </html>
