@@ -3,130 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
+    <title>Scanner 2025</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: sans-serif; width: 100vw; height: 100vh; }
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: sans-serif; width: 100vw; height: 100vh; color: white; }
         #container { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
         
         video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; background: #000; }
         canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; display: none; }
 
-        /* Кнопка смены камеры */
-        #switchBtn {
-            position: absolute; top: 30px; right: 30px; z-index: 20;
-            background: rgba(255,255,255,0.3); border: 2px solid #fff; border-radius: 50%;
-            width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;
-            font-size: 30px; cursor: pointer; color: white;
-        }
+        /* Стартовый экран (обязателен для разблокировки камеры) */
+        #overlay { position: absolute; z-index: 100; text-align: center; }
+        .start-btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
 
-        /* Кнопка затвора */
-        #shutter {
-            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
-            width: 80px; height: 80px; background: rgba(255, 255, 255, 0.4);
-            border: 6px solid #fff; border-radius: 50%; z-index: 20; cursor: pointer;
-            display: flex; justify-content: center; align-items: center;
-        }
-        #shutter::after { content: ''; width: 55px; height: 55px; background: #fff; border-radius: 50%; }
+        /* Кнопки управления */
+        #controls { position: absolute; bottom: 40px; width: 100%; display: none; justify-content: space-evenly; align-items: center; z-index: 20; }
+        #shutter { width: 80px; height: 80px; background: rgba(255,255,255,0.4); border: 5px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
+        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
+        #switchBtn { width: 60px; height: 60px; background: rgba(0,0,0,0.5); border: 2px solid #fff; border-radius: 50%; font-size: 30px; display: flex; justify-content: center; align-items: center; color: white; }
 
         /* Надпись ГОТОВО */
-        #doneLabel {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 100; color: #0f0; font-size: 5rem; font-weight: 900;
-            text-shadow: 0 0 30px #000; display: none; text-transform: uppercase;
-        }
-
-        /* Индикатор ошибок */
-        #errorLog { position: absolute; top: 10px; left: 10px; color: red; z-index: 1000; font-size: 10px; background: rgba(0,0,0,0.5); }
+        #doneLabel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; color: #0f0; font-size: 5rem; font-weight: 900; display: none; text-transform: uppercase; text-shadow: 0 0 20px #000; }
     </style>
 </head>
 <body>
 
 <div id="container">
-    <div id="errorLog"></div>
+    <!-- Кнопка для запуска (разблокирует доступ) -->
+    <div id="overlay">
+        <button class="start-btn" onclick="startSystem()">ПОГНАЛИ</button>
+    </div>
+
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
     
-    <div id="switchBtn">🔄</div>
-    <div id="shutter"></div>
+    <div id="controls">
+        <div id="switchBtn" onclick="switchCamera()">🔄</div>
+        <div id="shutter" onclick="takePhoto()"></div>
+    </div>
+    
     <div id="doneLabel">ГОТОВО</div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    tg.ready();
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const shutter = document.getElementById('shutter');
-    const switchBtn = document.getElementById('switchBtn');
+    const controls = document.getElementById('controls');
+    const overlay = document.getElementById('overlay');
     const doneLabel = document.getElementById('doneLabel');
-    const errorLog = document.getElementById('errorLog');
 
     let currentStream = null;
     let useFrontCamera = false;
 
-    async function initCamera() {
-        const constraints = {
-            video: {
-                facingMode: useFrontCamera ? "user" : "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            },
-            audio: false
-        };
+    async function startSystem() {
+        overlay.style.display = 'none';
+        controls.style.display = 'flex';
+        await initCamera();
+    }
 
+    async function initCamera() {
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
         }
 
+        const constraints = {
+            video: { 
+                facingMode: useFrontCamera ? "user" : "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        };
+
         try {
             currentStream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = currentStream;
-            // Принудительный запуск для iOS
-            video.play();
-            errorLog.innerText = ""; 
+            // Явный вызов play для iOS
+            await video.play();
         } catch (err) {
-            errorLog.innerText = "ОШИБКА КАМЕРЫ: " + err.name;
-            console.error(err);
+            alert("Ошибка камеры: " + err.name + ". Убедитесь, что используете HTTPS!");
+            overlay.style.display = 'block';
+            controls.style.display = 'none';
         }
     }
 
-    // Переключение камеры
-    switchBtn.onclick = () => {
+    function switchCamera() {
         useFrontCamera = !useFrontCamera;
         initCamera();
-    };
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
 
-    // Сделать снимок
-    shutter.onclick = () => {
+    function takePhoto() {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
         
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Останавливаем камеру
+        // Останавливаем стрим
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
         }
         
         video.style.display = "none";
-        shutter.style.display = "none";
-        switchBtn.style.display = "none";
+        controls.style.display = "none";
         canvas.style.display = "block";
         doneLabel.style.display = "block";
 
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 
-        tg.MainButton.setText("ПЕРЕЗАПУСК");
+        tg.MainButton.setText("ЗАНОВО");
         tg.MainButton.show();
         tg.MainButton.onClick(() => location.reload());
-    };
-
-    // Запуск при загрузке
-    window.addEventListener('load', initCamera);
+    }
 </script>
 </body>
 </html>
