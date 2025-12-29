@@ -3,47 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kisa Scanner</title>
+    <title>Fast Scanner</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #f0f; font-family: 'Arial Black', sans-serif; overflow: hidden; width: 100vw; height: 100vh; }
-        #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         
-        /* Слой с фото */
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 50; display: none; }
+        /* Видео поток с камеры */
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         
-        /* Начальный экран */
-        #mainUi { z-index: 100; text-align: center; }
-        .btn-wrapper { position: relative; width: 240px; height: 80px; }
-        .btn { width: 100%; height: 100%; background: #f0f; color: #000; border: none; border-radius: 20px; font-weight: bold; font-size: 1.6rem; text-transform: uppercase; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 110; }
+        /* Холст для финального стоп-кадра */
+        canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; display: none; }
 
-        /* НАДПИСЬ - МАКСИМАЛЬНЫЙ ПРИОРИТЕТ */
-        #verdict { 
-            position: fixed; /* Именно fixed, чтобы не зависеть от родителей */
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 9999; 
-            padding: 30px 60px; border: 10px solid #f0f; display: none;
-            background: rgba(0,0,0,0.85); font-size: 4rem; font-weight: 900;
-            color: #f0f; text-align: center; width: 80%; box-sizing: border-box;
-            box-shadow: 0 0 40px #f0f; text-shadow: 0 0 10px #000;
-            pointer-events: none; /* Чтобы не мешала кликать */
+        /* Круглая кнопка затвора */
+        #shutter {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 80px; background: rgba(255, 255, 255, 0.3);
+            border: 5px solid #fff; border-radius: 50%; z-index: 10; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
+
+        /* Надпись ГОТОВО */
+        #doneLabel {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 20; color: #0f0; font-size: 4rem; font-weight: 900;
+            text-shadow: 0 0 20px #000; display: none; text-transform: uppercase;
         }
     </style>
 </head>
 <body>
 
 <div id="container">
-    <canvas id="photoCanvas"></canvas>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
     
-    <div id="verdict">КИСА</div>
-
-    <div id="mainUi">
-        <div class="btn-wrapper">
-            <button class="btn">ПОГНАЛИ</button>
-            <input type="file" accept="image/*" capture="user" id="fileInput">
-        </div>
-    </div>
+    <div id="shutter"></div>
+    <div id="doneLabel">ГОТОВО</div>
 </div>
 
 <script>
@@ -51,61 +47,56 @@
     tg.expand();
     tg.ready();
 
-    const fileInput = document.getElementById('fileInput');
-    const canvas = document.getElementById('photoCanvas');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const shutter = document.getElementById('shutter');
+    const doneLabel = document.getElementById('doneLabel');
     const ctx = canvas.getContext('2d');
-    const verdict = document.getElementById('verdict');
-    const mainUi = document.getElementById('mainUi');
 
-    fileInput.onchange = function(e) {
-        if (!e.target.files || e.target.files.length === 0) return;
+    // 1. Сразу включаем камеру при запуске
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" }, // Фронтальная камера
+                audio: false 
+            });
+            video.srcObject = stream;
+        } catch (err) {
+            alert("Нет доступа к камере. Проверьте разрешения в настройках Telegram.");
+        }
+    }
 
-        const reader = new FileReader();
+    // 2. Логика "Сделать фото"
+    shutter.onclick = () => {
+        // Устанавливаем размер холста как у видео
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         
-        // Прячем кнопку сразу
-        mainUi.style.display = "none";
+        // Рисуем текущий кадр из видео на холст
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Останавливаем камеру (замораживаем поток)
+        const tracks = video.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        
+        // Скрываем видео и кнопку, показываем холст и надпись
+        video.style.display = "none";
+        shutter.style.display = "none";
+        canvas.style.display = "block";
+        doneLabel.style.display = "block";
 
-        reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                // Рисуем фото
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                canvas.style.display = "block";
+        // Вибрация
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('heavy');
 
-                // Показываем вердикт
-                setTimeout(() => {
-                    verdict.style.display = 'block';
-                    
-                    // Дублируем надпись на самом фото для надежности
-                    const fontSize = Math.floor(canvas.width / 5);
-                    ctx.font = `bold ${fontSize}px Arial`;
-                    ctx.fillStyle = "#f0f";
-                    ctx.textAlign = "center";
-                    ctx.lineWidth = fontSize / 10;
-                    ctx.strokeStyle = "black";
-                    ctx.strokeText("КИСА", canvas.width / 2, canvas.height / 2);
-                    ctx.fillText("КИСА", canvas.width / 2, canvas.height / 2);
-
-                    // Вибрация
-                    if (tg.HapticFeedback) {
-                        tg.HapticFeedback.notificationOccurred('success');
-                    }
-
-                    // Кнопка перезапуска
-                    tg.MainButton.setText("ЕЩЕ РАЗ");
-                    tg.MainButton.setParams({"color": "#ff00ff"});
-                    tg.MainButton.show();
-                    tg.MainButton.onClick(() => {
-                        location.reload();
-                    });
-                }, 500);
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(e.target.files[0]);
+        // Кнопка перезапуска в интерфейсе ТГ
+        tg.MainButton.setText("ЕЩЕ РАЗ");
+        tg.MainButton.show();
+        tg.MainButton.onClick(() => {
+            location.reload();
+        });
     };
+
+    startCamera();
 </script>
 </body>
 </html>
