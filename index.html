@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Scanner Debug</title>
+    <title>AI Scanner Fix</title>
     
-    <!-- КОНСОЛЬ ОТЛАДКИ (Шестеренка появится в углу) -->
+    <!-- ПРИНУДИТЕЛЬНАЯ КОНСОЛЬ -->
     <script src="cdn.jsdelivr.net"></script>
-    <script>eruda.init();</script>
+    <script>
+        eruda.init();
+        console.log("Консоль запущена!");
+    </script>
 
-    <!-- Библиотеки ИИ 2025 -->
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
@@ -19,12 +21,11 @@
         video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
         canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; pointer-events: none; }
         #startBtn { z-index: 10; padding: 20px 40px; background: #0f0; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; }
-        #info { position: absolute; top: 20px; z-index: 10; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #0f0; text-align: center; width: 85%; font-size: 12px; border-radius: 5px; }
+        #info { position: absolute; top: 20px; z-index: 10; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #0f0; text-align: center; width: 85%; font-size: 12px; }
     </style>
 </head>
 <body>
-
-    <div id="info">СИСТЕМА ГОТОВА. НАЖМИТЕ СТАРТ.</div>
+    <div id="info">ОЖИДАНИЕ КЛИКА...</div>
     <video id="v" autoplay playsinline muted></video>
     <canvas id="c"></canvas>
     <button id="startBtn">ПОГНАЛИ</button>
@@ -42,8 +43,9 @@
     let model = null;
 
     btn.onclick = async () => {
+        console.log("Кнопка нажата");
         btn.style.display = "none";
-        info.innerText = "ШАГ 1: ДОСТУП К КАМЕРЕ...";
+        info.innerText = "ЗАПУСК КАМЕРЫ...";
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -52,67 +54,43 @@
             v.srcObject = stream;
             v.style.display = "block";
             await v.play();
-            
+            console.log("Камера работает");
             initAI();
         } catch (err) {
-            info.innerText = "ОШИБКА: НУЖЕН HTTPS И РАЗРЕШЕНИЕ В НАСТРОЙКАХ ТГ";
-            info.style.color = "red";
-            console.error("Camera error:", err);
+            info.innerText = "ОШИБКА КАМЕРЫ";
+            console.error("Camera Error:", err);
         }
     };
 
     async function initAI() {
-        info.innerText = "ШАГ 2: ПОДГОТОВКА ЯДРА TFJS...";
         try {
+            info.innerText = "ЗАГРУЗКА ИИ...";
             await tf.ready();
-            
-            // Проверка бэкенда (WebGL или CPU)
-            try {
-                await tf.setBackend('webgl');
-                console.log("Используется WebGL (GPU)");
-            } catch (e) {
-                await tf.setBackend('cpu');
-                console.warn("WebGL заблокирован, переключаюсь на CPU");
-            }
-            
-            info.innerText = "ШАГ 3: ЗАГРУЗКА МОДЕЛИ (5 МБ)...";
+            await tf.setBackend('cpu'); // Самый надежный режим для ТГ
             model = await cocoSsd.load();
-            
-            info.innerText = "ИИ АКТИВИРОВАН. ИЩУ ОБЪЕКТЫ.";
+            info.innerText = "ИИ ГОТОВ";
             detectFrame();
         } catch (e) {
-            info.innerText = "КРИТИЧЕСКАЯ ОШИБКА ИИ. ПРОВЕРЬ КОНСОЛЬ (ШЕСТЕРЕНКА).";
-            info.style.color = "red";
-            console.error("AI Init Error:", e);
+            info.innerText = "ОШИБКА ЗАГРУЗКИ ИИ";
+            console.error("AI Error:", e);
         }
     }
 
     async function detectFrame() {
         if (!model || v.paused) return;
+        const predictions = await model.detect(v);
+        ctx.clearRect(0, 0, c.width, c.height);
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
 
-        try {
-            const predictions = await model.detect(v);
-            
-            ctx.clearRect(0, 0, c.width, c.height);
-            c.width = v.videoWidth;
-            c.height = v.videoHeight;
-
-            predictions.forEach(p => {
-                if (p.score > 0.6) {
-                    info.innerText = `ОБЪЕКТ: ${p.class.toUpperCase()}`;
-                    ctx.strokeStyle = "#0f0";
-                    ctx.lineWidth = 6;
-                    ctx.strokeRect(...p.bbox);
-                    
-                    ctx.fillStyle = "#0f0";
-                    ctx.font = "bold 30px Arial";
-                    ctx.fillText(p.class, p.bbox[0], p.bbox[1] > 40 ? p.bbox[1] - 10 : 40);
-                }
-            });
-        } catch (err) {
-            console.error("Detection loop error:", err);
-        }
-
+        predictions.forEach(p => {
+            if (p.score > 0.6) {
+                info.innerText = "ВИЖУ: " + p.class.toUpperCase();
+                ctx.strokeStyle = "#0f0";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(...p.bbox);
+            }
+        });
         requestAnimationFrame(detectFrame);
     }
 </script>
