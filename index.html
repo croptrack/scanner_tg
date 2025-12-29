@@ -3,29 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Scanner Fix</title>
+    <title>AI Scanner Debug RED</title>
     
-    <!-- ПРИНУДИТЕЛЬНАЯ КОНСОЛЬ -->
+    <!-- КОНСОЛЬ ОТЛАДКИ (Шестеренка будет ярко-красной) -->
     <script src="cdn.jsdelivr.net"></script>
     <script>
-        eruda.init();
-        console.log("Консоль запущена!");
+        // Инициализация Eruda с красной темой
+        eruda.init({
+            theme: 'dark' // Используем темную тему как базу
+        });
+        // Установка кастомного красного цвета для иконки
+        eruda.get('Settings').set({
+            'button color': '#FF0000'
+        });
+        console.log("КРАСНАЯ Консоль отладки запущена!");
     </script>
 
+    <!-- Библиотеки ИИ 2025 -->
     <script src="cdn.jsdelivr.net"></script>
     <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
 
     <style>
-        body { margin: 0; background: #000; color: #0f0; font-family: monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
         video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
         canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; pointer-events: none; }
-        #startBtn { z-index: 10; padding: 20px 40px; background: #0f0; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; }
-        #info { position: absolute; top: 20px; z-index: 10; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #0f0; text-align: center; width: 85%; font-size: 12px; }
+        #startBtn { z-index: 10; padding: 20px 40px; background: #FF0000; color: #fff; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; box-shadow: 0 0 15px rgba(255,0,0,0.5); }
+        #info { position: absolute; top: 20px; z-index: 10; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #FF0000; text-align: center; width: 85%; font-size: 12px; border-radius: 5px; color: #FF0000; }
     </style>
 </head>
 <body>
-    <div id="info">ОЖИДАНИЕ КЛИКА...</div>
+
+    <div id="info">СИСТЕМА ГОТОВА. НАЖМИТЕ КРАСНУЮ КНОПКУ.</div>
     <video id="v" autoplay playsinline muted></video>
     <canvas id="c"></canvas>
     <button id="startBtn">ПОГНАЛИ</button>
@@ -43,7 +52,7 @@
     let model = null;
 
     btn.onclick = async () => {
-        console.log("Кнопка нажата");
+        console.log("Кнопка нажата, запуск процесса...");
         btn.style.display = "none";
         info.innerText = "ЗАПУСК КАМЕРЫ...";
         
@@ -66,7 +75,7 @@
         try {
             info.innerText = "ЗАГРУЗКА ИИ...";
             await tf.ready();
-            await tf.setBackend('cpu'); // Самый надежный режим для ТГ
+            await tf.setBackend('cpu');
             model = await cocoSsd.load();
             info.innerText = "ИИ ГОТОВ";
             detectFrame();
@@ -86,9 +95,12 @@
         predictions.forEach(p => {
             if (p.score > 0.6) {
                 info.innerText = "ВИЖУ: " + p.class.toUpperCase();
-                ctx.strokeStyle = "#0f0";
+                ctx.strokeStyle = "#FF0000"; // Красная рамка
                 ctx.lineWidth = 4;
                 ctx.strokeRect(...p.bbox);
+                ctx.fillStyle = "#FF0000"; // Красный текст
+                ctx.font = "bold 24px Arial";
+                ctx.fillText(p.class, p.bbox, p.bbox > 20 ? p.bbox - 10 : 20);
             }
         });
         requestAnimationFrame(detectFrame);
