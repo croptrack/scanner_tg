@@ -20,7 +20,7 @@
         }
         #ui-overlay {
             position: absolute; top: 20px; left: 0; width: 100%;
-            text-align: center; z-index: 10; pointer-events: none;
+            text-align: center; z-index: 10;
         }
         #result {
             position: absolute; top: 50%; left: 50%;
@@ -29,7 +29,11 @@
             display: none; padding: 20px; border-radius: 10px;
             z-index: 20; text-align: center; width: 80%;
         }
-        .status { background: rgba(0,0,0,0.6); padding: 5px; }
+        .status { background: rgba(0,0,0,0.6); padding: 5px; margin-top: 10px; }
+        #startButton {
+            background-color: #00ff00; color: #000; border: none; padding: 10px 20px;
+            font-size: 1rem; cursor: pointer; border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -38,7 +42,8 @@
     <video id="video" playsinline autocomplete="off"></video>
     <canvas id="output"></canvas>
     <div id="ui-overlay">
-        <div class="status">ПОИСК СИЛУЭТА...</div>
+        <button id="startButton">Начать сканирование</button>
+        <div class="status">Ожидание действия пользователя...</div>
     </div>
     <div id="result"></div>
 </div>
@@ -49,11 +54,11 @@
     const ctx = canvas.getContext('2d');
     const resultDiv = document.getElementById('result');
     const statusText = document.querySelector('.status');
+    const startButton = document.getElementById('startButton');
 
     let detector;
     let isScanning = false;
 
-    // Инициализация Telegram
     const tg = window.Telegram.WebApp;
     tg.expand();
 
@@ -71,7 +76,7 @@
     async function initDetector() {
         const model = poseDetection.SupportedModels.MoveNet;
         detector = await poseDetection.createDetector(model);
-        renderPrediction();
+        // renderPrediction(); // Переносим запуск в обработчик кнопки
     }
 
     function showVerdict() {
@@ -90,7 +95,7 @@
         setTimeout(() => {
             resultDiv.style.display = 'none';
             isScanning = false;
-        }, 3000); // Показывает результат 3 секунды
+        }, 3000);
     }
 
     async function renderPrediction() {
@@ -99,8 +104,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (poses.length > 0) {
-            const person = poses[0];
-            // Если нейросеть уверена в силуэте более чем на 40%
+            const person = poses;
             if (person.score > 0.4) {
                 statusText.innerText = "ОБЪЕКТ ОБНАРУЖЕН";
                 statusText.style.color = "#ff0";
@@ -114,12 +118,26 @@
         requestAnimationFrame(renderPrediction);
     }
 
+    // Обработчик нажатия кнопки
+    startButton.addEventListener('click', async () => {
+        startButton.style.display = 'none';
+        statusText.innerText = "Запрос доступа к камере...";
+        try {
+            await setupCamera();
+            video.play();
+            await initDetector();
+            renderPrediction(); // Запуск цикла рендера после инициализации
+        } catch (error) {
+            statusText.innerText = "Ошибка доступа к камере! Проверьте разрешения в настройках смартфона.";
+            console.error(error);
+        }
+    });
+
+
     async function main() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        await setupCamera();
-        video.play();
-        await initDetector();
+        // Все остальное перенесено в обработчик кнопки startButton
     }
 
     main();
