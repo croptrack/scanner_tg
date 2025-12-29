@@ -4,124 +4,129 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Skaner 3000</title>
-    <!-- Подключаем необходимые библиотеки через CDN -->
+    <!-- Библиотеки ИИ (TensorFlow + Face Detection) -->
+    <script src="cdn.jsdelivr.net"></script>
+    <script src="cdn.jsdelivr.net"></script>
     <script src="telegram.org"></script>
-    <script src="cdn.jsdelivr.net"></script>
-    <script src="cdn.jsdelivr.net"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #000; color: #0f0; font-family: monospace; }
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+        #container { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-        #ui-overlay { position: relative; z-index: 10; width: 100%; text-align: center; margin-top: 20px; }
-        .status { background: rgba(0,0,0,0.8); padding: 8px; margin: 10px auto; width: 80%; border: 1px solid #0f0; font-size: 14px; }
+        .ui { z-index: 10; text-align: center; width: 100%; }
+        #statusBox { background: rgba(0,255,0,0.1); border: 1px solid #0f0; padding: 10px; margin: 10px; font-size: 12px; }
         #result { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 2.2rem; font-weight: bold; display: none; padding: 25px; 
-            border-radius: 15px; z-index: 100; text-align: center; width: 80%; 
-            border: 4px solid; background: rgba(0,0,0,0.9);
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 100; padding: 20px; border: 4px solid; display: none;
+            background: rgba(0,0,0,0.9); font-size: 2rem; font-weight: bold;
         }
-        .btn-box { position: relative; display: inline-block; margin-top: 10px; }
-        #startButton { background: #0f0; color: #000; border: none; padding: 15px 30px; font-size: 1.1rem; font-weight: bold; border-radius: 8px; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .btn { background: #0f0; color: #000; padding: 20px 40px; border: none; border-radius: 10px; font-weight: bold; position: relative; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
     </style>
 </head>
 <body>
 
 <div id="container">
     <canvas id="output"></canvas>
-    <div id="ui-overlay">
-        <div class="status" id="statusBox">ЗАГРУЗКА ИИ...</div>
-        <div class="btn-box">
-            <button id="startButton">СДЕЛАТЬ СКАН</button>
-            <input type="file" accept="image/*" id="fileInput">
+    <div id="result"></div>
+    <div class="ui">
+        <div id="statusBox">ЗАГРУЗКА ИИ МОЗГА...</div>
+        <div id="btnContainer" style="display: none;">
+            <div class="btn">
+                СКАН ОБЪЕКТА
+                <input type="file" accept="image/*" id="fileInput">
+            </div>
         </div>
     </div>
-    <div id="result"></div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
+    const statusBox = document.getElementById('statusBox');
+    const btnContainer = document.getElementById('btnContainer');
+    const fileInput = document.getElementById('fileInput');
     const canvas = document.getElementById('output');
     const ctx = canvas.getContext('2d');
-    const statusBox = document.getElementById('statusBox');
     const resultDiv = document.getElementById('result');
-    const fileInput = document.getElementById('fileInput');
 
-    let segmenter;
+    let detector;
 
-    // Инициализация сегментации (детект силуэта и лица)
-    async function init() {
+    // 1. Загрузка ИИ
+    async function loadAI() {
         try {
-            const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
-            segmenter = await bodySegmentation.createSegmenter(model, {
-                runtime: 'tfjs',
-                modelType: 'general'
-            });
+            statusBox.innerText = "ИНИЦИАЛИЗАЦИЯ TFJS...";
+            await tf.ready();
+            
+            // Пытаемся включить ускорение, если нет - работаем на обычном движке
+            await tf.setBackend('webgl').catch(() => tf.setBackend('cpu'));
+            
+            statusBox.innerText = "ЗАГРУЗКА МОДЕЛИ ЛИЦА...";
+            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+            detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
+            
             statusBox.innerText = "СИСТЕМА ГОТОВА";
+            btnContainer.style.display = 'block'; // Показываем кнопку только когда ИИ готов
         } catch (e) {
-            console.error(e);
-            statusBox.innerText = "ОШИБКА ИНИЦИАЛИЗАЦИИ";
+            statusBox.innerText = "ОШИБКА: " + e.message;
         }
     }
 
-    fileInput.onchange = async (event) => {
-        const file = event.target.files[0];
-        if (!file || !segmenter) return;
+    // 2. Обработка фото
+    fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-        statusBox.innerText = "АНАЛИЗ СИЛУЭТА...";
         resultDiv.style.display = 'none';
+        statusBox.innerText = "ЧТЕНИЕ ОБЪЕКТА...";
 
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = async () => {
+                // Настройка холста
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
 
-        img.onload = async () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
+                statusBox.innerText = "ИИ СКАНИРУЕТ СТРУКТУРУ...";
 
-            try {
-                // Пытаемся найти человека (силуэт)
-                const segmentation = await segmenter.segmentPeople(canvas);
-                
-                // Проверяем, есть ли на маске закрашенные пиксели (человек найден)
-                const hasPerson = segmentation.length > 0 && segmentation[0].allPoses.length > 0;
+                try {
+                    // ИИ ищет лицо на холсте
+                    const faces = await detector.estimateFaces(canvas);
 
-                if (hasPerson) {
-                    statusBox.innerText = "ОБЪЕКТ ИДЕНТИФИЦИРОВАН";
-                    
-                    // Отрисовываем маску силуэта для эффекта
-                    const mask = await bodySegmentation.toBinaryMask(segmentation);
-                    ctx.globalAlpha = 0.5;
-                    const maskImg = await ctx.createImageData(canvas.width, canvas.height);
-                    // (визуальный эффект - зеленая подсветка силуэта)
-                    
-                    setTimeout(showVerdict, 600);
-                } else {
-                    statusBox.innerText = "ЧЕЛОВЕК НЕ НАЙДЕН";
+                    if (faces.length > 0) {
+                        statusBox.innerText = "ОБЪЕКТ РАСПОЗНАН";
+                        // Рисуем рамку вокруг лица
+                        ctx.strokeStyle = "#0f0";
+                        ctx.lineWidth = img.width * 0.02;
+                        faces.forEach(f => ctx.strokeRect(f.box.xMin, f.box.yMin, f.box.width, f.box.height));
+                        
+                        setTimeout(showVerdict, 800);
+                    } else {
+                        statusBox.innerText = "ОШИБКА: ЛИЦО НЕ НАЙДЕНО";
+                    }
+                } catch (err) {
+                    statusBox.innerText = "СБОЙ ИИ: " + err.message;
                 }
-            } catch (err) {
-                console.error(err);
-                statusBox.innerText = "СБОЙ СКАНЕРА";
-            }
+            };
+            img.src = event.target.result;
         };
+        reader.readAsDataURL(file);
     };
 
     function showVerdict() {
         const isBad = Math.random() > 0.5;
         resultDiv.innerText = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
-        resultDiv.style.color = isBad ? '#ff0000' : '#00ff00';
-        resultDiv.style.borderColor = isBad ? '#ff0000' : '#00ff00';
+        resultDiv.style.color = isBad ? '#f00' : '#0f0';
+        resultDiv.style.borderColor = isBad ? '#f00' : '#0f0';
         resultDiv.style.display = 'block';
-        
-        if (tg.HapticFeedback) {
-            tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
-        }
         statusBox.innerText = "СКАНИРОВАНИЕ ЗАВЕРШЕНО";
+        
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
     }
 
-    init();
+    loadAI();
 </script>
 </body>
 </html>
