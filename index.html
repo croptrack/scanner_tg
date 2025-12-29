@@ -71,8 +71,9 @@
     }
 
     async function processImage(event) {
-        const file = event.target.files[0]; // Получаем первый файл из списка
-        if (!file) return;
+        const files = event.target.files;
+        if (files.length === 0) return; // Проверка на пустой выбор
+        const file = files[0];
 
         startButton.style.display = 'none'; 
         const img = new Image();
@@ -86,7 +87,8 @@
                 statusText.innerText = "Анализ изображения...";
                 
                 const poses = await detector.estimatePoses(img);
-                // ИСПРАВЛЕНИЕ: Проверяем score первого элемента массива poses[0].score
+                
+                // ИСПРАВЛЕНИЕ: Правильный доступ к score первого объекта в массиве poses
                 if (poses.length > 0 && poses[0].score > 0.4) { 
                     statusText.innerText = "ОБЪЕКТ ОБНАРУЖЕН";
                     statusText.style.color = "#ff0";
