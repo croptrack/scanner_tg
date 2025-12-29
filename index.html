@@ -15,13 +15,13 @@
         /* Слой с интерфейсом */
         .ui { z-index: 5; text-align: center; }
         .btn-wrapper { position: relative; width: 220px; height: 70px; }
-        .btn { width: 100%; height: 100%; background: #0f0; color: #000; border: none; border-radius: 15px; font-weight: bold; font-size: 1.3rem; text-transform: uppercase; }
+        .btn { width: 100%; height: 100%; background: #0f0; color: #000; border: none; border-radius: 15px; font-weight: bold; font-size: 1.5rem; text-transform: uppercase; cursor: pointer; }
         #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 6; }
 
         /* Всплывающая надпись */
         #verdict { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 1000; /* Максимальный приоритет */
+            z-index: 1000; 
             padding: 20px 40px; border: 8px solid #ff0000; display: none;
             background: rgba(0,0,0,0.9); font-size: 3.5rem; font-weight: 900;
             color: #ff0000; text-align: center; width: 90%; box-sizing: border-box;
@@ -32,16 +32,12 @@
 <body>
 
 <div id="container">
-    <!-- Сюда попадет фото -->
     <canvas id="photoCanvas"></canvas>
-    
-    <!-- Сюда вылетит надпись -->
     <div id="verdict">ДАЛБАЁБ</div>
 
-    <!-- Кнопка запуска -->
     <div class="ui" id="mainUi">
         <div class="btn-wrapper">
-            <button class="btn">СКАНИРОВАТЬ</button>
+            <button class="btn">ПОГНАЛИ</button>
             <input type="file" accept="image/*" capture="user" id="fileInput">
         </div>
     </div>
@@ -66,21 +62,18 @@
         reader.onload = function(event) {
             const img = new Image();
             img.onload = function() {
-                // 1. Рисуем фото на весь экран
+                // 1. Отрисовка фото
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
                 canvas.style.display = "block";
-                
-                // Скрываем кнопку
                 mainUi.style.display = "none";
 
-                // 2. Показываем надпись через небольшую паузу для эффекта
+                // 2. Вывод надписи через 600мс
                 setTimeout(() => {
-                    // Проявляем DOM элемент
                     verdict.style.display = 'block';
 
-                    // Дублируем надпись прямо в пиксели фото (на случай сбоя слоев)
+                    // Дублируем надпись в пиксели холста
                     const fontSize = Math.floor(canvas.width / 6);
                     ctx.font = `bold ${fontSize}px Impact`;
                     ctx.fillStyle = "#ff0000";
@@ -90,18 +83,17 @@
                     ctx.strokeText("ДАЛБАЁБ", canvas.width / 2, canvas.height / 2);
                     ctx.fillText("ДАЛБАЁБ", canvas.width / 2, canvas.height / 2);
 
-                    // 3. Вибрация (ошибка/success)
+                    // 3. Вибрация
                     if (tg.HapticFeedback) {
                         tg.HapticFeedback.notificationOccurred('error');
                     }
 
-                    // Показываем встроенную кнопку Телеграма для сброса
-                    tg.MainButton.setText("ПОВТОРИТЬ");
+                    // Кнопка сброса в интерфейсе Телеграм
+                    tg.MainButton.setText("ПОПРОБОВАТЬ ЕЩЕ");
                     tg.MainButton.show();
                     tg.MainButton.onClick(() => {
                         location.reload();
                     });
-
                 }, 600);
             };
             img.src = event.target.result;
