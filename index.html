@@ -6,37 +6,42 @@
     <title>Skaner 3000</title>
     <script src="telegram.org"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; }
+        body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: 'Impact', sans-serif; overflow: hidden; }
         #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 5; display: none; }
+        /* Слой с фото */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 10; display: none; }
         
-        .ui { z-index: 20; text-align: center; }
-        #statusBox { background: rgba(0,0,0,0.8); border: 1px solid #0f0; padding: 10px; margin-bottom: 20px; font-family: monospace; }
-        
-        .btn-wrapper { position: relative; width: 200px; height: 60px; }
-        .btn { width: 100%; height: 100%; background: #0f0; color: #000; border: none; border-radius: 10px; font-weight: bold; font-size: 1.1rem; }
-        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 30; }
+        /* Слой с интерфейсом */
+        .ui { z-index: 5; text-align: center; }
+        .btn-wrapper { position: relative; width: 220px; height: 70px; }
+        .btn { width: 100%; height: 100%; background: #0f0; color: #000; border: none; border-radius: 15px; font-weight: bold; font-size: 1.3rem; text-transform: uppercase; }
+        #fileInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 6; }
 
-        /* Всплывающая плашка */
-        #verdictOverlay { 
+        /* Всплывающая надпись */
+        #verdict { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 100; padding: 20px; border: 5px solid; display: none;
-            background: rgba(0,0,0,0.9); font-size: 2.5rem; font-weight: 900;
-            text-align: center; width: 85%; box-sizing: border-box; font-family: Impact, sans-serif;
+            z-index: 1000; /* Максимальный приоритет */
+            padding: 20px 40px; border: 8px solid #ff0000; display: none;
+            background: rgba(0,0,0,0.9); font-size: 3.5rem; font-weight: 900;
+            color: #ff0000; text-align: center; width: 90%; box-sizing: border-box;
+            box-shadow: 0 0 50px rgba(255,0,0,0.5);
         }
     </style>
 </head>
 <body>
 
 <div id="container">
+    <!-- Сюда попадет фото -->
     <canvas id="photoCanvas"></canvas>
-    <div id="verdictOverlay"></div>
+    
+    <!-- Сюда вылетит надпись -->
+    <div id="verdict">ДАЛБАЁБ</div>
 
+    <!-- Кнопка запуска -->
     <div class="ui" id="mainUi">
-        <div id="statusBox">СИСТЕМА ГОТОВА</div>
         <div class="btn-wrapper">
-            <button class="btn">СДЕЛАТЬ СКАН</button>
+            <button class="btn">СКАНИРОВАТЬ</button>
             <input type="file" accept="image/*" capture="user" id="fileInput">
         </div>
     </div>
@@ -45,68 +50,59 @@
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+    tg.ready();
 
     const fileInput = document.getElementById('fileInput');
     const canvas = document.getElementById('photoCanvas');
     const ctx = canvas.getContext('2d');
-    const statusBox = document.getElementById('statusBox');
-    const verdictOverlay = document.getElementById('verdictOverlay');
+    const verdict = document.getElementById('verdict');
     const mainUi = document.getElementById('mainUi');
 
     fileInput.onchange = function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        statusBox.innerText = "ОБРАБОТКА...";
-        
         const reader = new FileReader();
         reader.onload = function(event) {
             const img = new Image();
             img.onload = function() {
-                // 1. Показываем холст и рисуем фото
+                // 1. Рисуем фото на весь экран
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
                 canvas.style.display = "block";
                 
-                // Скрываем кнопку скана
+                // Скрываем кнопку
                 mainUi.style.display = "none";
 
-                // 2. Генерируем вердикт через 500мс
+                // 2. Показываем надпись через небольшую паузу для эффекта
                 setTimeout(() => {
-                    const isBad = Math.random() > 0.5;
-                    const text = isBad ? 'ДАЛБАЁБ' : 'НЕ ДАЛБАЁБ';
-                    const color = isBad ? '#ff0000' : '#00ff00';
+                    // Проявляем DOM элемент
+                    verdict.style.display = 'block';
 
-                    // 3. Рисуем текст прямо на картинке (на случай, если оверлей не сработает)
-                    ctx.fillStyle = color;
-                    ctx.font = `bold ${canvas.width / 8}px sans-serif`;
+                    // Дублируем надпись прямо в пиксели фото (на случай сбоя слоев)
+                    const fontSize = Math.floor(canvas.width / 6);
+                    ctx.font = `bold ${fontSize}px Impact`;
+                    ctx.fillStyle = "#ff0000";
                     ctx.textAlign = "center";
+                    ctx.lineWidth = fontSize / 10;
                     ctx.strokeStyle = "black";
-                    ctx.lineWidth = canvas.width / 50;
-                    ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-                    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+                    ctx.strokeText("ДАЛБАЁБ", canvas.width / 2, canvas.height / 2);
+                    ctx.fillText("ДАЛБАЁБ", canvas.width / 2, canvas.height / 2);
 
-                    // 4. Показываем всплывающее окно
-                    verdictOverlay.innerText = text;
-                    verdictOverlay.style.color = color;
-                    verdictOverlay.style.borderColor = color;
-                    verdictOverlay.style.display = 'block';
-
-                    // 5. Вибрация
+                    // 3. Вибрация (ошибка/success)
                     if (tg.HapticFeedback) {
-                        tg.HapticFeedback.notificationOccurred(isBad ? 'error' : 'success');
+                        tg.HapticFeedback.notificationOccurred('error');
                     }
 
-                    // Кнопка "Сброс" через 3 секунды
-                    setTimeout(() => {
-                        tg.MainButton.setText("ПОПРОБОВАТЬ ЕЩЕ РАЗ");
-                        tg.MainButton.show();
-                        tg.MainButton.onClick(() => {
-                            location.reload();
-                        });
-                    }, 1000);
-                }, 500);
+                    // Показываем встроенную кнопку Телеграма для сброса
+                    tg.MainButton.setText("ПОВТОРИТЬ");
+                    tg.MainButton.show();
+                    tg.MainButton.onClick(() => {
+                        location.reload();
+                    });
+
+                }, 600);
             };
             img.src = event.target.result;
         };
