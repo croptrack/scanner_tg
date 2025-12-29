@@ -3,100 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner 2025</title>
-    <script src="telegram.org"></script>
+    <title>Camera Test</title>
     <style>
-        body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: sans-serif; color: white; width: 100vw; height: 100vh; }
-        #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
-        canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 5; display: none; }
-        #startScreen { position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; }
-        .start-btn { background: #f0f; color: #000; padding: 25px 50px; border: none; border-radius: 20px; font-size: 1.8rem; font-weight: bold; cursor: pointer; }
-        #ui { position: absolute; bottom: 50px; width: 100%; display: none; justify-content: space-evenly; align-items: center; z-index: 20; }
-        #shutter { width: 80px; height: 80px; background: rgba(255,255,255,0.4); border: 5px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
-        #shutter::after { content: ''; width: 60px; height: 60px; background: #fff; border-radius: 50%; }
-        #switchBtn { width: 60px; height: 60px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 50%; font-size: 30px; display: flex; justify-content: center; align-items: center; color: white; }
-        #kisaLabel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; color: #f0f; font-size: 5rem; font-weight: 900; display: none; text-shadow: 0 0 20px #000; border: 10px solid #f0f; padding: 20px; background: rgba(0,0,0,0.8); }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        /* Видео на весь экран */
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
     </style>
 </head>
 <body>
-<div id="container">
-    <div id="startScreen"><button class="start-btn" id="goBtn">ПОГНАЛИ</button></div>
+
+    <!-- playsinline и muted — ОБЯЗАТЕЛЬНЫ, иначе в ТГ будет черный экран -->
     <video id="v" autoplay playsinline muted></video>
-    <canvas id="c"></canvas>
-    <div id="ui">
-        <div id="switchBtn">🔄</div>
-        <div id="shutter"></div>
-    </div>
-    <div id="kisaLabel">КИСА</div>
-</div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
-    const v = document.getElementById('v');
-    const c = document.getElementById('c');
-    const ui = document.getElementById('ui');
-    const startScreen = document.getElementById('startScreen');
-    const kisa = document.getElementById('kisaLabel');
-    const goBtn = document.getElementById('goBtn');
-
-    let stream = null;
-    let front = false;
-
-    // ГЛАВНОЕ: Запуск камеры строго внутри клика
-    goBtn.addEventListener('click', async () => {
-        startScreen.style.display = 'none';
-        v.style.display = 'block';
-        ui.style.display = 'flex';
-        
-        await startCam();
-    });
-
-    async function startCam() {
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        
-        const constr = {
-            video: { 
-                facingMode: front ? "user" : "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        };
-
+    async function startCamera() {
         try {
-            stream = await navigator.mediaDevices.getUserMedia(constr);
-            v.srcObject = stream;
-            // Критично для Telegram/iOS:
-            v.onloadedmetadata = () => v.play();
-        } catch (e) {
-            alert("КАМЕРА ЗАБЛОКИРОВАНА. Проверь HTTPS и настройки разрешений Telegram.");
-            console.error(e);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: "environment" // Сразу задняя камера
+                },
+                audio: false
+            });
+            const videoElement = document.getElementById('v');
+            videoElement.srcObject = stream;
+            
+            // Явный запуск для iPhone/Telegram
+            videoElement.play();
+        } catch (err) {
+            alert("Ошибка камеры: " + err.name + "\nУбедитесь, что сайт открыт по HTTPS");
         }
     }
 
-    document.getElementById('switchBtn').onclick = () => {
-        front = !front;
-        startCam();
-    };
-
-    document.getElementById('shutter').onclick = () => {
-        const ctx = c.getContext('2d');
-        c.width = v.videoWidth;
-        c.height = v.videoHeight;
-        ctx.drawImage(v, 0, 0);
-        
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        
-        v.style.display = 'none';
-        ui.style.display = 'none';
-        c.style.display = 'block';
-        kisa.style.display = 'block';
-
-        if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-        tg.MainButton.setText("ЗАНОВО").show().onClick(() => location.reload());
-    };
+    // Запуск при загрузке страницы
+    window.addEventListener('DOMContentLoaded', startCamera);
 </script>
 </body>
 </html>
